@@ -1,137 +1,181 @@
-# vaultsearch
+# VaultSearch
 
-Chat sobre tu bóveda de Obsidian sin indexar a mano. Un servidor **MCP** que:
+**A simple TUI to serach your Obsidian vaults.**
 
-- **Indexa solo**: vigila la carpeta (watchdog). Cada vez que guardas, creas, borras o renombras una nota, se actualiza el índice en ~2 s. Además hace un barrido de seguridad cada 10 min, por si iCloud se come algún evento.
-- **Es incremental**: cada nota se parte en trozos por encabezados y párrafos, y cada trozo lleva un hash. Si editas un párrafo, solo se recalcula ese embedding. Los renombrados no recalculan nada.
-- **Hace búsqueda híbrida**: BM25 (SQLite FTS5) + similitud semántica (sqlite-vec), fusionadas con *Reciprocal Rank Fusion*. La semántica encuentra cosas por significado; las keywords encuentran nombres propios y términos exactos.
-- **Funciona 100 % en local**: embeddings con `fastembed` (ONNX, CPU, sin torch). El modelo por defecto es multilingüe (español, inglés, japonés…).
-- **Tiene un solo fichero de índice** fuera de la bóveda (`~/.vaultsearch/…db`), para que iCloud no lo sincronice ni lo corrompa.
+Instead of using an Obisidan plugin I wanted to have a more personalized experience; so I decided to create a simple TUI to search my own notes and continue to customize it as im using it.
 
-Herramientas que expone al LLM:
+The idea is to follow a RAG-like structure where the notes are indexed locally, keeps the index up to date while modifing the files, and gives you three ways to search:
 
-| Tool | Para qué |
-|---|---|
-| `search_vault(query, limit, folder?, tag?)` | Búsqueda híbrida, filtrable por carpeta o etiqueta |
-| `read_note(path)` | Nota completa + backlinks |
-| `list_notes(folder?, limit)` | Notas más recientes ("¿qué escribí esta semana?") |
-| `index_status()` | Nº de notas y trozos indexados |
+- a **TUI** with live results and a note preview,
+- a **CLI** for one-off searches and scripting (mostly for quick searches and debuggin, won't use it most likely)
+- an **MCP server**, so Claude (or any MCP client) can search and read your notes for you.
 
-## Instalación (Windows)
+Everything runs **locally**, at the moment I don't plan to implement any type of LLM content outside the MCP server. Since I can't reallly run a "real" LLM (at least 27b even with quantization); but can be a good implementation in the future.
 
-Se recomienda [uv](https://docs.astral.sh/uv/) (`winget install astral-sh.uv`).
+![vaultsearch searching a vault](docs/images/tui-search.png)
 
-```powershell
-cd C:\ruta\a\vault-search
+---
+
+## Example
+
+Results update as you type. Each result shows the note, the section it came from and a snippet with your words highlighted. Move through them with the arrow keys and the preview on the right follows, scrolled to the matching section.
+
+Press `Enter` and the note opens in Obsidian. Press `e` to open it in your editor instead (default for the terminal - *TBC*), or `y` to copy its path.
+
+Every time you save a note in Obsidian, the *watcher* panel at the bottom shows it being re-indexed a couple of seconds later. You never have to index the vault yourself.
+
+Type `/` for commands:
+
+![slash commands](docs/images/tui-commands.png)
+
+`/recent` lists what you touched lately. `/folder Japanese` or `/tag journal` narrows every search until you turn it off:
+
+![recently modified notes](docs/images/tui-recent.png)
+
+### Keys
+
+| Key                       | What it does                              |
+| ------------------------- | ----------------------------------------- |
+| type                      | search (live)                             |
+| `↓` / `Enter`        | jump from the prompt to the results       |
+| `↑` `↓`             | move through results, the preview follows |
+| `Enter`, `o` or click | open the note in Obsidian                 |
+| `e`                     | open the note in your default editor      |
+| `y`                     | copy the note's full path                 |
+| `/` or `Esc`          | back to the prompt                        |
+| `F1`                    | help                                      |
+| `Ctrl+Q`                | quit                                      |
+
+---
+
+## Getting started
+
+You need Python 3.10+ and [uv](https://docs.astral.sh/uv/) (`winget install astral-sh.uv` on Windows, `brew install uv` on macOS).
+
+```bash
+git clone https://github.com/pabloChantada/vault-search.git
+cd vault-search
 uv sync
-
-# Primera indexación desde terminal (descarga el modelo, ~220 MB, una sola vez)
-uv run vaultsearch --vault "C:\Users\TU_USUARIO\iCloudDrive\iCloud~md~obsidian\SecondBrain" index
-uv run vaultsearch --vault "...\SecondBrain" search "qué pensaba de la oferta de Indra"
+uv run vaultsearch --vault "/path/to/your/vault"
 ```
 
-Sin uv: `python -m venv .venv`, `.venv\Scripts\activate`, `pip install -e .`
+The first run downloads the embedding model (about 220 MB, once) and indexes the whole vault. A few hundred notes take well under a minute on a CPU, **DISCLAIMER: I HAVEN'T TRIED IN A REALLY BIG VAULT, at the moment it works for my personal use. Can be optimized in the future**. After that, only notes that changed since last time are re-read.
 
-## Conectarlo a Claude Desktop
+To avoid typing `--vault` every time, set an environment variable:
 
-Edita `%APPDATA%\Claude\claude_desktop_config.json` (o Ajustes → Developer → Edit Config):
+```powershell
+# Windows (then open a new terminal)
+setx VAULT_PATH "path\to\vault"
+```
+
+```bash
+# macOS / Linux
+export VAULT_PATH="path\to\vault"
+```
+
+Now `uv run vaultsearch` makes it simpler.
+
+---
+
+## The CLI
+
+For quick lookups or scripts, the same engine is available as commands:
+
+```bash
+vaultsearch index                      # update the index, with a progress bar and a summary
+vaultsearch search "kanji compounds"   # print the top results
+vaultsearch search "habits" --tag reading -n 5
+vaultsearch status                     # index size and recently modified notes
+vaultsearch watch                      # keep the index fresh in the background
+```
+
+`search` updates the index before searching (it's cheap), so results are never stale. Pass `--no-sync` to skip that step.
+
+---
+
+## Letting Claude read your notes (MCP)
+
+`vaultsearch serve` starts an [MCP](https://modelcontextprotocol.io) server. Add it to Claude Desktop's config (`%APPDATA%\Claude\claude_desktop_config.json` on Windows, `~/Library/Application Support/Claude/claude_desktop_config.json` on macOS):
 
 ```json
 {
   "mcpServers": {
     "vaultsearch": {
       "command": "uv",
-      "args": ["--directory", "C:\\ruta\\a\\vault-search", "run", "vaultsearch", "serve"],
-      "env": {
-        "VAULT_PATH": "C:\\Users\\TU_USUARIO\\iCloudDrive\\iCloud~md~obsidian\\SecondBrain"
-      }
+      "args": ["--directory", "/path/to/vault-search", "run", "vaultsearch", "serve"],
+      "env": { "VAULT_PATH": "/path/to/your/vault" }
     }
   }
 }
 ```
 
-Reinicia Claude Desktop y pregúntale cosas como *"busca en mi bóveda lo que tengo sobre kanji N4"*. Mientras Claude Desktop está abierto, el servidor sigue vivo y vigilando la bóveda, así que no tienes que hacer nada más.
+Restart Claude Desktop and ask things like *"what did I write about kanji review last week?"*. Claude gets four tools:
 
-Sirve igual para cualquier cliente MCP (Claude Code: `claude mcp add vaultsearch -- uv --directory ... run vaultsearch serve`).
+| Tool                                          | What it's for                                       |
+| --------------------------------------------- | --------------------------------------------------- |
+| `search_vault(query, limit, folder?, tag?)` | hybrid search, optionally scoped to a folder or tag |
+| `read_note(path)`                           | the full note, plus the notes that link to it       |
+| `list_notes(folder?, limit)`                | most recently modified notes                        |
+| `index_status()`                            | how many notes and chunks are indexed               |
 
-## App interactiva (`vaultsearch`)
+While Claude Desktop is open, the server keeps watching your vault, just like the TUI does.
 
-Sin argumentos, `vaultsearch` abre una app de terminal persistente (Textual):
+---
 
-- **Búsqueda en vivo**: los resultados se actualizan mientras escribes (búsqueda híbrida, sin LLM).
-- **Vista previa**: al moverte por los resultados ves la nota completa renderizada y salta a la sección encontrada.
-- **Abrir notas**: `Enter` u `o` la abre en Obsidian (`obsidian://`), `e` en el editor por defecto, `y` copia la ruta. Hacer clic en un resultado también la abre.
-- **Watcher en directo**: el panel *watcher* muestra las notas que se reindexan al guardarlas en Obsidian.
-- **Comandos `/`** con autocompletado (→): `/recent`, `/folder X`, `/tag X`, `/reindex`, `/status`, `/clear`, `/help`, `/quit`.
-- `↓` desde el prompt salta a los resultados; `/` o `Esc` vuelve al prompt. `F1` ayuda, `Ctrl+Q` salir.
-
-## CLI
+## How it works
 
 ```
-vaultsearch [--vault RUTA] [--db RUTA] [-v] {ui,index,search,status,watch,serve}
+Obsidian saves a note ─► watchdog ─► debounce (2 s)
+                                        │
+                                        ▼
+                   split into chunks by heading and paragraph
+                                        │  each chunk is hashed
+                     ┌──────────────────┴──────────────────┐
+              unchanged chunk                         new chunk
+              (keeps its vector)              fastembed ─► vector
+                     └──────────────────┬──────────────────┘
+                                        ▼
+        one SQLite file: notes · chunks · FTS5 keyword index · sqlite-vec vectors
+
+query ─► BM25 keyword search  ┐
+      └► vector similarity    ┴─► Reciprocal Rank Fusion ─► max 2 chunks per note
 ```
 
-- `index`: actualiza el índice con barra de progreso y muestra un resumen (nuevas, actualizadas, borradas, tamaño del índice).
-- `search "texto" [-n 8] [--folder X] [--tag Y]`: resultados con la ruta de la nota, la sección y un fragmento con los términos resaltados. Antes de buscar actualiza el índice (es rápido); `--no-sync` lo evita.
-- `search` sin texto: **modo interactivo**. El modelo se carga una vez y puedes hacer varias búsquedas seguidas. Enter vacío o Ctrl+C para salir.
-- `status`: resumen del índice y las últimas notas modificadas.
-- `watch`: indexa y se queda vigilando, sin MCP.
-- `serve`: servidor MCP por stdio (lo lanza el cliente).
+A few decisions worth explaining:
 
-Consejo: define `VAULT_PATH` para no tener que pasar `--vault` cada vez:
+- **Hybrid search.** Embeddings find notes by meaning ("how was I studying" finds "review routine"), but they're bad at names and exact terms. BM25 is the opposite. Merging both rankings with Reciprocal Rank Fusion gets you the best of each, with no score tuning.
+- **Incremental indexing.** Every chunk is hashed. Edit one paragraph and only that paragraph gets re-embedded. Renaming or moving a note re-embeds nothing.
+- **The index lives outside the vault** (`~/.vaultsearch/`). If your vault syncs through iCloud or OneDrive, a database file inside it would get synced mid-write and eventually corrupted.
+- **A safety-net rescan.** Cloud-synced folders don't always fire file events reliably, so the watcher also does a cheap full rescan every 10 minutes. It only compares modification times, so it costs almost nothing.
+- **Local, multilingual embeddings.** The default model (`paraphrase-multilingual-MiniLM-L12-v2`, via ONNX) handles English, Spanish, Japanese and dozens more, runs on CPU and needs no API key.
 
-```powershell
-setx VAULT_PATH "C:\Users\TU_USUARIO\iCloudDrive\iCloud~md~obsidian\SecondBrain"
-# abre una terminal nueva y luego:
-uv run vaultsearch index
-uv run vaultsearch          # app interactiva
+---
+
+## Configuration
+
+| Variable              | Default                                   |                                                                                                                          |
+| --------------------- | ----------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| `VAULT_PATH`        | —                                        | your vault (same as `--vault`)                                                                                         |
+| `VAULTSEARCH_DB`    | `~/.vaultsearch/<vault>-<hash>.db`      | where the index lives                                                                                                    |
+| `VAULTSEARCH_MODEL` | `paraphrase-multilingual-MiniLM-L12-v2` | any [fastembed text model](https://qdrant.github.io/fastembed/examples/Supported_Models/); changing it rebuilds the index |
+
+## Development
+
+```bash
+uv sync --extra dev
+uv run pytest
 ```
 
-Variables de entorno: `VAULT_PATH`, `VAULTSEARCH_DB`, `VAULTSEARCH_MODEL`.
+The tests use a tiny fake embedder, so they run offline in a few seconds. That includes one that drives the TUI headlessly.
 
-## Cómo funciona
+## Known limitations
 
-```
- Obsidian guarda nota ──► watchdog ──► cola con debounce (2 s)
-                                          │
-                                          ▼
-                              chunker (encabezados/párrafos)
-                                          │  hash por trozo
-                              ┌───────────┴───────────┐
-                         ya existe                  nuevo
-                     (reutiliza id)          fastembed → vector
-                              └───────────┬───────────┘
-                                          ▼
-                 SQLite: files · chunks · chunks_fts (FTS5) · vec_chunks (sqlite-vec)
+- **Keyword search and Japanese.** SQLite's tokenizer splits on spaces, and Japanese doesn't use them, so Japanese queries rely on the semantic side of the search. That works well, but exact-match keyword hits won't show up. A trigram index would fix it.
+- **Opening notes in Obsidian** uses the `obsidian://` URL scheme, which needs the vault name in vaultsearch to match the one Obsidian knows.
 
- LLM ──► search_vault ──► FTS5 bm25 ∪ KNN vectorial ──► RRF ──► máx. 2 trozos por nota
-```
+## Ideas
 
-Estructura del código:
-
-```
-src/vaultsearch/
-  config.py    rutas y opciones
-  chunker.py   Markdown → trozos (respeta bloques de código, frontmatter, #tags, [[links]])
-  embedder.py  fastembed (+ embedder falso para tests)
-  store.py     SQLite + FTS5 + sqlite-vec
-  indexer.py   indexado incremental, borrados, renombrados, barrido completo
-  watcher.py   watchdog + debounce + barrido periódico
-  search.py    búsqueda híbrida con RRF
-  app.py       arranque en segundo plano (el MCP responde mientras carga el modelo)
-  server.py    herramientas MCP
-  cli.py       línea de comandos
-```
-
-## Notas y limitaciones
-
-- **Japonés en keywords**: FTS5 (`unicode61`) no separa palabras en japonés, porque no lleva espacios. Para japonés tira de la búsqueda semántica, que sí lo entiende. Si hiciera falta, se puede añadir una segunda tabla FTS con el tokenizador `trigram`.
-- **Cambiar de modelo** (`VAULTSEARCH_MODEL`) reconstruye el índice automáticamente. Alternativas en fastembed: `intfloat/multilingual-e5-large` (mejor y más pesado) o `paraphrase-multilingual-mpnet-base-v2`.
-- **Tests**: `uv run --extra dev pytest`. Usan un embedder falso, así que no descargan nada.
-
-## Ideas para seguir
-
-- Usar los `[[links]]` para reordenar resultados: subir notas enlazadas con las mejores.
-- Filtro por fechas (notas de diario).
-- Reranker (cross-encoder) sobre el top 20.
-- Exportar los vectores para la vista 3D (UMAP → three.js), ya calculados aquí.
+- Boost results that are linked to other strong results (`[[links]]` as a ranking signal)
+- Date filters for journal notes
+- A cross-encoder reranker over the top 20
+- Export the vectors for a 3D map of the vault

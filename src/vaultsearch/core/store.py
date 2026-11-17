@@ -1,4 +1,4 @@
-"""Almacén en un único fichero SQLite: metadatos + FTS5 (keywords) + sqlite-vec (vectores)."""
+"""Single-file SQLite store: metadata + FTS5 (keywords) + sqlite-vec (vectors)."""
 from __future__ import annotations
 
 import json
@@ -26,19 +26,19 @@ class Store:
         self.db.enable_load_extension(False)
         self.db.execute("PRAGMA journal_mode=WAL")
         self.db.execute("PRAGMA foreign_keys=ON")
-        # El watcher y el servidor MCP escriben/leen desde hilos distintos
+        # The watcher and the MCP server / TUI read and write from different threads
         self.lock = threading.RLock()
         self.dim = dim
         self._init_schema(model_id)
 
-    # ---------- esquema ----------
+    # ---------- schema ----------
     def _init_schema(self, model_id: str) -> None:
         with self.lock, self.db:
             self.db.execute("CREATE TABLE IF NOT EXISTS meta(key TEXT PRIMARY KEY, value TEXT)")
             meta = {r["key"]: r["value"] for r in self.db.execute("SELECT key, value FROM meta")}
             wanted = {"schema": SCHEMA_VERSION, "model": model_id, "dim": str(self.dim)}
             if meta and any(meta.get(k) != v for k, v in wanted.items()):
-                # Cambió el modelo de embeddings o el esquema: reconstruimos desde cero
+                # Embedding model or schema changed: rebuild from scratch
                 for t in ("vec_chunks", "chunks_fts", "chunks", "files"):
                     self.db.execute(f"DROP TABLE IF EXISTS {t}")
             self.db.executescript(
@@ -73,7 +73,7 @@ class Store:
                 "INSERT OR REPLACE INTO meta(key, value) VALUES (?, ?)", list(wanted.items())
             )
 
-    # ---------- ficheros ----------
+    # ---------- files ----------
     def file_state(self) -> dict[str, tuple[float, int]]:
         with self.lock:
             return {r["path"]: (r["mtime"], r["size"]) for r in self.db.execute("SELECT path, mtime, size FROM files")}
@@ -100,7 +100,7 @@ class Store:
         title: str,
         tags: list[str],
         links: list[str],
-        keep: dict[int, tuple[int, str]],  # chunk_id -> (ordinal, heading) que se conservan
+        keep: dict[int, tuple[int, str]],  # chunk_id -> (ordinal, heading) for chunks we keep
         new: list[tuple[int, str, str, str, list[float]]],  # (ordinal, heading, text, hash, embedding)
     ) -> None:
         with self.lock, self.db:
@@ -116,7 +116,7 @@ class Store:
                     self._delete_chunk(cid)
             for cid, (ordinal, heading) in keep.items():
                 self.db.execute("UPDATE chunks SET ordinal=?, heading=? WHERE id=?", (ordinal, heading, cid))
-            # Título actualizado en FTS para los que se conservan (por si se renombró la nota)
+            # Refresh the title in FTS for kept chunks (the note may have been renamed)
             for cid in keep:
                 r = self.db.execute("SELECT heading, text FROM chunks WHERE id=?", (cid,)).fetchone()
                 self.db.execute("DELETE FROM chunks_fts WHERE rowid=?", (cid,))
@@ -148,21 +148,21 @@ class Store:
             self.db.execute("DELETE FROM files WHERE path=?", (path,))
 
     def rename_file(self, old: str, new: str) -> bool:
-        """Mueve una nota sin recalcular embeddings. Devuelve False si no existía."""
+        """Move a note without re-embedding anything. Returns False if it was not indexed."""
         with self.lock, self.db:
             if not self.db.execute("SELECT 1 FROM files WHERE path=?", (old,)).fetchone():
                 return False
             if self.db.execute("SELECT 1 FROM files WHERE path=?", (new,)).fetchone():
                 self.delete_file(new)
-            self.db.execute("UPDATE files SET path=? WHERE path=?", (new, old))  # ON UPDATE CASCADE mueve los chunks
+            self.db.execute("UPDATE files SET path=? WHERE path=?", (new, old))  # ON UPDATE CASCADE moves the chunks too
             return True
 
-    # ---------- búsqueda ----------
+    # ---------- search ----------
     def fts_search(self, match_expr: str, k: int) -> list[tuple[int, float]]:
         with self.lock:
             try:
                 rows = self.db.execute(
-                    # Pesos bm25: título 3, encabezado 2, texto 1
+                    # bm25 weights: title 3, heading 2, body 1
                     "SELECT rowid, bm25(chunks_fts, 3.0, 2.0, 1.0) AS s FROM chunks_fts "
                     "WHERE chunks_fts MATCH ? ORDER BY s LIMIT ?",
                     (match_expr, k),
@@ -213,6 +213,6 @@ class Store:
     def stats(self) -> dict:
         with self.lock:
             return {
-                "notas": self.db.execute("SELECT COUNT(*) FROM files").fetchone()[0],
-                "trozos": self.db.execute("SELECT COUNT(*) FROM chunks").fetchone()[0],
+                "notes": self.db.execute("SELECT COUNT(*) FROM files").fetchone()[0],
+                "chunks": self.db.execute("SELECT COUNT(*) FROM chunks").fetchone()[0],
             }

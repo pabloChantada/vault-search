@@ -1,7 +1,7 @@
-"""Embeddings locales con fastembed (ONNX, sin torch, funciona en CPU).
+"""Local embeddings with fastembed (ONNX, no torch, runs on CPU).
 
-El modelo por defecto es multilingüe (español, inglés, japonés...). La primera
-vez descarga ~220 MB de HuggingFace y luego queda en caché.
+The default model is multilingual (English, Spanish, Japanese, ...). The first
+run downloads ~220 MB from Hugging Face; after that it is cached.
 """
 from __future__ import annotations
 
@@ -28,7 +28,7 @@ class FastEmbedder:
 
 
 class HashEmbedder:
-    """Embedder falso y determinista (bolsa de palabras con hashing). Solo para tests sin red."""
+    """Fake, deterministic embedder (hashed bag of words). For tests without network access."""
 
     dim = 256
 

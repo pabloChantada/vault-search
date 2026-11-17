@@ -1,4 +1,4 @@
-"""Búsqueda híbrida: BM25 (FTS5) + vectores, fusionados con Reciprocal Rank Fusion."""
+"""Hybrid search: BM25 (FTS5) + vector similarity, merged with Reciprocal Rank Fusion."""
 from __future__ import annotations
 
 import json
@@ -33,7 +33,7 @@ class Hit:
 
 
 def _fts_query(q: str) -> str:
-    # Cada palabra entre comillas (evita errores de sintaxis FTS5) y con prefijo*, unidas con OR
+    # Quote every word (avoids FTS5 syntax errors), allow prefixes, OR them together
     words = [w for w in WORD_RE.findall(q) if len(w) > 1]
     return " OR ".join(f'"{w}"*' for w in words)
 
@@ -70,7 +70,7 @@ class Searcher:
                 continue
             if tag and tag not in (t.lower() for t in tags):
                 continue
-            # Máximo 2 trozos por nota para que salgan notas variadas
+            # At most 2 chunks per note so results stay varied
             if per_note.get(r["path"], 0) >= 2:
                 continue
             per_note[r["path"]] = per_note.get(r["path"], 0) + 1

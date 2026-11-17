@@ -1,7 +1,7 @@
-"""Parte notas Markdown en trozos por encabezados y párrafos.
+"""Split Markdown notes into chunks by headings and paragraphs.
 
-Cada trozo conserva la ruta de encabezados ("Japonés > Kanji > N5") para que
-el LLM tenga contexto y para mostrar citas legibles.
+Each chunk keeps its heading path ("Japanese > Kanji > N5") so results have
+context and citations read naturally.
 """
 from __future__ import annotations
 
@@ -37,7 +37,7 @@ class ParsedNote:
 
 
 def _split_long(text: str, max_chars: int) -> list[str]:
-    """Agrupa párrafos hasta max_chars; corta párrafos enormes por frases."""
+    """Group paragraphs up to max_chars; split huge paragraphs by sentence."""
     paras = [p.strip() for p in re.split(r"\n\s*\n", text) if p.strip()]
     out: list[str] = []
     buf = ""
@@ -69,7 +69,7 @@ def parse_note(raw: str, title: str, max_chars: int = 1200) -> ParsedNote:
     try:
         post = frontmatter.loads(raw)
         body, meta = post.content, post.metadata
-    except Exception:  # frontmatter mal formado: indexamos el texto tal cual
+    except Exception:  # broken frontmatter: index the text as-is
         body, meta = raw, {}
 
     tags: set[str] = set()
@@ -80,7 +80,7 @@ def parse_note(raw: str, title: str, max_chars: int = 1200) -> ParsedNote:
 
     links = sorted({m.group(1).strip() for m in WIKILINK_RE.finditer(body)})
 
-    # Recorremos línea a línea respetando bloques de código (un '#' dentro no es encabezado)
+    # Walk line by line, respecting code fences (a '#' inside one is not a heading)
     sections: list[tuple[str, list[str]]] = []
     stack: list[tuple[int, str]] = []
     current: list[str] = []
@@ -88,7 +88,7 @@ def parse_note(raw: str, title: str, max_chars: int = 1200) -> ParsedNote:
 
     def flush():
         heading = " > ".join(h for _, h in stack) if stack else title
-        if any(l.strip() for l in current):
+        if any(line.strip() for line in current):
             sections.append((heading, current.copy()))
         current.clear()
 
@@ -113,7 +113,7 @@ def parse_note(raw: str, title: str, max_chars: int = 1200) -> ParsedNote:
         for piece in _split_long("\n".join(lines), max_chars):
             chunks.append(Chunk(ordinal=len(chunks), heading=heading, text=piece))
 
-    # Nota vacía o solo con frontmatter: al menos un trozo con el título para que sea encontrable
+    # Empty or frontmatter-only note: keep one chunk with the title so it can still be found
     if not chunks:
         chunks.append(Chunk(ordinal=0, heading=title, text=title))
 

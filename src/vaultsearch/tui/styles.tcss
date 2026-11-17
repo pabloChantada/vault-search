@@ -1,0 +1,98 @@
+/* vaultsearch TUI — dark terminal theme (keep in sync with vaultsearch/theme.py) */
+$vs-accent: #7DD3C0;
+$vs-path: #F2B66D;
+$vs-dim: #9AA0A6;
+$vs-bg: #0F1115;
+$vs-panel: #161920;
+$vs-line: #262A33;
+$vs-line-strong: #3A3F4B;
+$vs-selected: #1C2029;
+
+Screen {
+    background: $vs-bg;
+    color: #E6E6E3;
+}
+
+#header {
+    border: round $vs-accent;
+    padding: 0 2;
+    height: auto;
+    width: auto;
+    max-width: 100%;
+    margin: 0 1;
+}
+
+#main {
+    height: 1fr;
+    margin: 0 1;
+}
+
+#results {
+    width: 45%;
+    border: round $vs-line;
+    background: $vs-bg;
+}
+
+#results:focus-within {
+    border: round $vs-accent;
+}
+
+#results ListItem {
+    padding: 0 1;
+    margin-bottom: 1;
+    background: $vs-bg;
+}
+
+#results ListItem.-highlight {
+    background: $vs-selected;
+}
+
+.r-body {
+    padding-left: 4;
+}
+
+.r-meta {
+    padding-left: 4;
+    color: $vs-dim;
+}
+
+#preview-wrap {
+    width: 55%;
+    border: round $vs-line;
+    padding: 0 1;
+}
+
+#preview-wrap:focus-within {
+    border: round $vs-accent;
+}
+
+#preview {
+    background: $vs-bg;
+}
+
+#events {
+    height: 5;
+    margin: 0 1;
+    border: round $vs-line;
+    background: $vs-bg;
+}
+
+#prompt {
+    margin: 0 1;
+    border: round $vs-line-strong;
+    background: $vs-bg;
+}
+
+#prompt:focus {
+    border: round $vs-accent;
+}
+
+#status {
+    height: 1;
+    margin: 0 2;
+    color: $vs-dim;
+}
+
+Footer {
+    background: $vs-panel;
+}

@@ -1,10 +1,11 @@
-"""Indexación incremental: solo se recalculan embeddings de los trozos que cambian."""
+"""Incremental indexing: only chunks whose content changed get re-embedded."""
 from __future__ import annotations
 
 import hashlib
 import logging
 import os
 from pathlib import Path
+from typing import Callable
 
 from .chunker import parse_note
 from .config import Config
@@ -13,6 +14,9 @@ from .store import Store
 
 log = logging.getLogger("vaultsearch")
 
+# on_progress(done, total, relative_path, status)
+ProgressFn = Callable[[int, int, str, str], None]
+
 
 class Indexer:
     def __init__(self, cfg: Config, store: Store, embedder: Embedder):
@@ -20,7 +24,7 @@ class Indexer:
         self.store = store
         self.embedder = embedder
 
-    # ---------- rutas ----------
+    # ---------- paths ----------
     def rel(self, abs_path: Path | str) -> str:
         return Path(abs_path).resolve().relative_to(self.cfg.vault).as_posix()
 
@@ -41,15 +45,15 @@ class Indexer:
                 if f.lower().endswith(".md"):
                     yield Path(root) / f
 
-    # ---------- operaciones ----------
+    # ---------- operations ----------
     def index_file(self, abs_path: Path) -> str:
-        """Devuelve 'new' | 'updated' | 'unchanged' | 'skipped'."""
+        """Returns 'new' | 'updated' | 'unchanged' | 'skipped'."""
         rel = self.rel(abs_path)
         try:
             st = abs_path.stat()
             raw_bytes = abs_path.read_bytes()
         except (FileNotFoundError, PermissionError, OSError) as e:
-            # iCloud a veces bloquea el fichero mientras sincroniza; el siguiente evento/barrido lo recogerá
+            # iCloud sometimes locks a file while syncing; the next event or rescan will pick it up
             log.debug("Could not read %s: %s", rel, e)
             return "skipped"
 
@@ -68,7 +72,7 @@ class Indexer:
         seen: set[str] = set()
         for ch in note.chunks:
             h = ch.hash
-            if h in seen:  # párrafo duplicado dentro de la misma nota
+            if h in seen:  # duplicated paragraph inside the same note
                 continue
             seen.add(h)
             if h in existing:
@@ -76,7 +80,7 @@ class Indexer:
             else:
                 to_embed.append(ch)
 
-        # Se embebe "título + encabezado + texto": mejora mucho la recuperación de trozos cortos
+        # Embed "title — heading + text": helps a lot with short chunks
         embs = self.embedder.embed([f"{note.title} — {c.heading}\n{c.text}" for c in to_embed]) if to_embed else []
         new = [(c.ordinal, c.heading, c.text, c.hash, e) for c, e in zip(to_embed, embs)]
 
@@ -94,17 +98,14 @@ class Indexer:
         if src_note and dest_note:
             if self.store.rename_file(self.rel(src), self.rel(dest)):
                 log.info("Renamed %s → %s", self.rel(src), self.rel(dest))
-            self.index_file(Path(dest))  # por si además cambió el contenido / título
+            self.index_file(Path(dest))  # in case the content or title changed too
         elif src_note:
             self.remove_file(src)
         elif dest_note:
             self.index_file(Path(dest))
 
-    def sync_all(self, on_progress=None) -> dict[str, int]:
-        """Barrido completo barato: solo abre ficheros cuyo mtime/tamaño cambió.
-
-        on_progress(done, total, rel_path, status) se llama tras cada nota (para barras de progreso).
-        """
+    def sync_all(self, on_progress: ProgressFn | None = None) -> dict[str, int]:
+        """Cheap full rescan: only opens files whose mtime or size changed."""
         known = self.store.file_state()
         counts = {"new": 0, "updated": 0, "unchanged": 0, "skipped": 0, "deleted": 0}
         present: set[str] = set()

@@ -1,7 +1,7 @@
-"""Vigila la bóveda y reindexa en segundo plano, con debounce.
+"""Watch the vault and re-index in the background, with debouncing.
 
-Además hace un barrido completo cada `rescan_s` segundos como red de seguridad:
-iCloud/OneDrive en Windows a veces no emiten eventos fiables.
+It also runs a full rescan every `rescan_s` seconds as a safety net:
+iCloud/OneDrive on Windows don't always emit reliable file events.
 """
 from __future__ import annotations
 
@@ -25,7 +25,7 @@ class _Handler(FileSystemEventHandler):
     def on_any_event(self, event: FileSystemEvent) -> None:
         if event.is_directory:
             if event.event_type in ("deleted", "moved"):
-                self.w.request_full_sync()  # carpeta borrada/movida: más fácil un barrido
+                self.w.request_full_sync()  # folder deleted/moved: a rescan is simpler
             return
         src = str(event.src_path)
         if event.event_type == "moved":
@@ -99,5 +99,5 @@ class VaultWatcher:
                     c = self.indexer.sync_all()
                     if any(c[k] for k in ("new", "updated", "deleted")):
                         log.info("Rescan: %s", c)
-            except Exception:  # nunca dejamos morir el hilo
+            except Exception:  # never let the worker thread die
                 log.exception("Watcher error")
