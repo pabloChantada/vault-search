@@ -25,8 +25,12 @@ class App:
         self.searcher: Searcher | None = None
         self.watcher: VaultWatcher | None = None
 
+    def open(self) -> None:
+        """Carga modelo e índice sin barrer ni vigilar (uso desde la CLI)."""
+        self._boot()
+
     def _boot(self) -> None:
-        log.info("Cargando modelo de embeddings (%s)...", self.cfg.embed_model)
+        log.info("Loading embedding model (%s)...", self.cfg.embed_model)
         embedder = make_embedder(self.cfg.embedder, self.cfg.embed_model)
         model_id = self.cfg.embed_model if self.cfg.embedder == "fastembed" else self.cfg.embedder
         self.store = Store(self.cfg.db_path, embedder.dim, model_id)
@@ -43,10 +47,10 @@ class App:
                     self.watcher = VaultWatcher(self.indexer, debounce_s=self.cfg.debounce_s)
                     self.watcher.start()
                 counts = self.indexer.sync_all()
-                log.info("Barrido inicial: %s", counts)
+                log.info("Initial sync: %s", counts)
             except Exception as e:  # se reporta al usar las herramientas
                 self.error = e
-                log.exception("Fallo al arrancar")
+                log.exception("Startup failed")
                 self.ready.set()
             finally:
                 self.synced.set()

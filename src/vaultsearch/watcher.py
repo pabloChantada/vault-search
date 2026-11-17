@@ -65,7 +65,7 @@ class VaultWatcher:
         self._observer.schedule(_Handler(self), str(self.indexer.cfg.vault), recursive=True)
         self._observer.start()
         threading.Thread(target=self._loop, name="vaultsearch-worker", daemon=True).start()
-        log.info("Vigilando %s", self.indexer.cfg.vault)
+        log.info("Watching %s", self.indexer.cfg.vault)
 
     def stop(self) -> None:
         self._stop.set()
@@ -98,6 +98,6 @@ class VaultWatcher:
                     last_rescan = now
                     c = self.indexer.sync_all()
                     if any(c[k] for k in ("new", "updated", "deleted")):
-                        log.info("Barrido: %s", c)
+                        log.info("Rescan: %s", c)
             except Exception:  # nunca dejamos morir el hilo
-                log.exception("Error en el watcher")
+                log.exception("Watcher error")

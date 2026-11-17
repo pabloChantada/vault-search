@@ -50,7 +50,7 @@ class Indexer:
             raw_bytes = abs_path.read_bytes()
         except (FileNotFoundError, PermissionError, OSError) as e:
             # iCloud a veces bloquea el fichero mientras sincroniza; el siguiente evento/barrido lo recogerá
-            log.debug("No se pudo leer %s: %s", rel, e)
+            log.debug("Could not read %s: %s", rel, e)
             return "skipped"
 
         file_hash = hashlib.sha1(raw_bytes).hexdigest()
@@ -81,42 +81,50 @@ class Indexer:
         new = [(c.ordinal, c.heading, c.text, c.hash, e) for c, e in zip(to_embed, embs)]
 
         self.store.write_note(rel, st.st_mtime, st.st_size, file_hash, note.title, note.tags, note.links, keep, new)
-        log.info("Indexada %s (%d trozos nuevos, %d reutilizados)", rel, len(new), len(keep))
+        log.info("Indexed %s (%d new chunks, %d reused)", rel, len(new), len(keep))
         return "updated" if prev_hash else "new"
 
     def remove_file(self, abs_path: Path | str) -> None:
         rel = self.rel(abs_path)
         self.store.delete_file(rel)
-        log.info("Eliminada del índice %s", rel)
+        log.info("Removed %s", rel)
 
     def move_file(self, src: Path | str, dest: Path | str) -> None:
         src_note, dest_note = self.is_note(src), self.is_note(dest)
         if src_note and dest_note:
             if self.store.rename_file(self.rel(src), self.rel(dest)):
-                log.info("Renombrada %s -> %s", self.rel(src), self.rel(dest))
+                log.info("Renamed %s → %s", self.rel(src), self.rel(dest))
             self.index_file(Path(dest))  # por si además cambió el contenido / título
         elif src_note:
             self.remove_file(src)
         elif dest_note:
             self.index_file(Path(dest))
 
-    def sync_all(self) -> dict[str, int]:
-        """Barrido completo barato: solo abre ficheros cuyo mtime/tamaño cambió."""
+    def sync_all(self, on_progress=None) -> dict[str, int]:
+        """Barrido completo barato: solo abre ficheros cuyo mtime/tamaño cambió.
+
+        on_progress(done, total, rel_path, status) se llama tras cada nota (para barras de progreso).
+        """
         known = self.store.file_state()
         counts = {"new": 0, "updated": 0, "unchanged": 0, "skipped": 0, "deleted": 0}
         present: set[str] = set()
-        for p in self.iter_notes():
+        notes = list(self.iter_notes())
+        for i, p in enumerate(notes, 1):
             rel = self.rel(p)
             present.add(rel)
             try:
                 st = p.stat()
             except OSError:
-                continue
-            prev = known.get(rel)
-            if prev and abs(prev[0] - st.st_mtime) < 1e-6 and prev[1] == st.st_size:
-                counts["unchanged"] += 1
-                continue
-            counts[self.index_file(p)] += 1
+                status = "skipped"
+            else:
+                prev = known.get(rel)
+                if prev and abs(prev[0] - st.st_mtime) < 1e-6 and prev[1] == st.st_size:
+                    status = "unchanged"
+                else:
+                    status = self.index_file(p)
+            counts[status] += 1
+            if on_progress:
+                on_progress(i, len(notes), rel, status)
         for rel in set(known) - present:
             self.store.delete_file(rel)
             counts["deleted"] += 1

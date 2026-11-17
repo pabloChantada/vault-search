@@ -54,16 +54,38 @@ Reinicia Claude Desktop y pregúntale cosas como *"busca en mi bóveda lo que te
 
 Sirve igual para cualquier cliente MCP (Claude Code: `claude mcp add vaultsearch -- uv --directory ... run vaultsearch serve`).
 
+## App interactiva (`vaultsearch`)
+
+Sin argumentos, `vaultsearch` abre una app de terminal persistente (Textual):
+
+- **Búsqueda en vivo**: los resultados se actualizan mientras escribes (búsqueda híbrida, sin LLM).
+- **Vista previa**: al moverte por los resultados ves la nota completa renderizada y salta a la sección encontrada.
+- **Abrir notas**: `Enter` u `o` la abre en Obsidian (`obsidian://`), `e` en el editor por defecto, `y` copia la ruta. Hacer clic en un resultado también la abre.
+- **Watcher en directo**: el panel *watcher* muestra las notas que se reindexan al guardarlas en Obsidian.
+- **Comandos `/`** con autocompletado (→): `/recent`, `/folder X`, `/tag X`, `/reindex`, `/status`, `/clear`, `/help`, `/quit`.
+- `↓` desde el prompt salta a los resultados; `/` o `Esc` vuelve al prompt. `F1` ayuda, `Ctrl+Q` salir.
+
 ## CLI
 
 ```
-vaultsearch [--vault RUTA] [--db RUTA] [-v] {serve,index,watch,search,status}
+vaultsearch [--vault RUTA] [--db RUTA] [-v] {ui,index,search,status,watch,serve}
 ```
 
+- `index`: actualiza el índice con barra de progreso y muestra un resumen (nuevas, actualizadas, borradas, tamaño del índice).
+- `search "texto" [-n 8] [--folder X] [--tag Y]`: resultados con la ruta de la nota, la sección y un fragmento con los términos resaltados. Antes de buscar actualiza el índice (es rápido); `--no-sync` lo evita.
+- `search` sin texto: **modo interactivo**. El modelo se carga una vez y puedes hacer varias búsquedas seguidas. Enter vacío o Ctrl+C para salir.
+- `status`: resumen del índice y las últimas notas modificadas.
+- `watch`: indexa y se queda vigilando, sin MCP.
 - `serve`: servidor MCP por stdio (lo lanza el cliente).
-- `index`: sincroniza una vez y sale.
-- `watch`: sincroniza y se queda vigilando, sin MCP.
-- `search "texto" [-n 8] [--folder X] [--tag Y]`: busca desde la terminal.
+
+Consejo: define `VAULT_PATH` para no tener que pasar `--vault` cada vez:
+
+```powershell
+setx VAULT_PATH "C:\Users\TU_USUARIO\iCloudDrive\iCloud~md~obsidian\SecondBrain"
+# abre una terminal nueva y luego:
+uv run vaultsearch index
+uv run vaultsearch          # app interactiva
+```
 
 Variables de entorno: `VAULT_PATH`, `VAULTSEARCH_DB`, `VAULTSEARCH_MODEL`.
 
