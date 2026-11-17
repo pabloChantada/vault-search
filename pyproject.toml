@@ -1,0 +1,29 @@
+[project]
+name = "vaultsearch"
+version = "0.1.0"
+description = "Búsqueda híbrida (semántica + keywords) sobre una bóveda de Obsidian, con indexación incremental automática y servidor MCP."
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "fastembed>=0.4",
+    "sqlite-vec>=0.1.6",
+    "watchdog>=4.0",
+    "mcp[cli]>=1.2",
+    "python-frontmatter>=1.1",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8"]
+
+[project.scripts]
+vaultsearch = "vaultsearch.cli:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/vaultsearch"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
