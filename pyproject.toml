@@ -30,3 +30,9 @@ packages = ["src/vaultsearch"]
 [tool.pytest.ini_options]
 pythonpath = ["src"]
 testpaths = ["tests"]
+
+[dependency-groups]
+dev = [
+    "py-spy>=0.4.3",
+    "scalene>=2.4.0",
+]

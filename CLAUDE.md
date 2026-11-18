@@ -12,6 +12,7 @@ Hybrid search over an Obsidian vault (the owner's "SecondBrain", stored in iClou
 ## How it works
 
 - Chunks are split by heading and paragraph (~1200 chars max) and hashed, so only changed chunks get re-embedded. Renames re-embed nothing (`ON UPDATE CASCADE`).
+- `sync_all` batches across notes: `_prepare` parses and diffs each note, `_flush` embeds the pending chunks in one call and writes them with `Store.write_notes` in one transaction. Measure changes with `scripts/bench_index.py`.
 - Storage is a single SQLite file outside the vault (`~/.vaultsearch/`), with FTS5 (`unicode61`, diacritics removed) and sqlite-vec (cosine).
 - Search runs BM25 and KNN, fuses them with RRF (k=60) and keeps at most 2 chunks per note.
 - The watcher debounces for 2 s and also runs a full rescan every 10 min, because iCloud drops events.

@@ -17,6 +17,9 @@ class Config:
     embed_model: str = DEFAULT_MODEL
     embedder: str = "fastembed"  # "fastembed" | "hash" (tests only)
     max_chunk_chars: int = 1200
+    embed_batch_size: int = 8  # texts per ONNX run (8 was fastest, see README benchmarks)
+    embed_threads: int | None = None  # ONNX intra-op threads; None = onnxruntime default (physical cores)
+    index_batch_chunks: int = 256  # new chunks gathered across notes before embedding + writing
     debounce_s: float = 2.0
     ignore_dirs: tuple[str, ...] = field(default=DEFAULT_IGNORE)
 
@@ -43,4 +46,7 @@ class Config:
             db_path=db_path,
             embed_model=os.environ.get("VAULTSEARCH_MODEL", DEFAULT_MODEL),
             embedder=os.environ.get("VAULTSEARCH_EMBEDDER", "fastembed"),
+            embed_batch_size=int(os.environ.get("VAULTSEARCH_EMBED_BATCH", "8")),
+            embed_threads=int(t) if (t := os.environ.get("VAULTSEARCH_EMBED_THREADS")) else None,
+            index_batch_chunks=int(os.environ.get("VAULTSEARCH_INDEX_BATCH", "256")),
         )

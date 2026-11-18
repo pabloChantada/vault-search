@@ -4,18 +4,28 @@ from __future__ import annotations
 import hashlib
 import logging
 import os
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable
 
-from .chunker import parse_note
+from .chunker import Chunk, parse_note
 from .config import Config
 from .embedder import Embedder
-from .store import Store
+from .store import NoteRecord, Store
 
 log = logging.getLogger("vaultsearch")
 
 # on_progress(done, total, relative_path, status)
 ProgressFn = Callable[[int, int, str, str], None]
+
+
+@dataclass
+class _Pending:
+    """A changed note that is parsed and diffed, waiting for its new chunks to be embedded."""
+
+    record: NoteRecord
+    to_embed: list[Chunk]
+    status: str  # "new" | "updated"
 
 
 class Indexer:
@@ -48,6 +58,17 @@ class Indexer:
     # ---------- operations ----------
     def index_file(self, abs_path: Path) -> str:
         """Returns 'new' | 'updated' | 'unchanged' | 'skipped'."""
+        prepared = self._prepare(abs_path)
+        if isinstance(prepared, str):
+            return prepared
+        self._flush([prepared])
+        return prepared.status
+
+    def _prepare(self, abs_path: Path) -> str | _Pending:
+        """Read and chunk a note and work out which chunks need embedding.
+
+        Returns a status string when there is nothing to write, otherwise a _Pending note.
+        """
         rel = self.rel(abs_path)
         try:
             st = abs_path.stat()
@@ -68,7 +89,7 @@ class Indexer:
         existing = self.store.existing_chunks(rel)
 
         keep: dict[int, tuple[int, str]] = {}
-        to_embed = []
+        to_embed: list[Chunk] = []
         seen: set[str] = set()
         for ch in note.chunks:
             h = ch.hash
@@ -80,13 +101,19 @@ class Indexer:
             else:
                 to_embed.append(ch)
 
-        # Embed "title — heading + text": helps a lot with short chunks
-        embs = self.embedder.embed([f"{note.title} — {c.heading}\n{c.text}" for c in to_embed]) if to_embed else []
-        new = [(c.ordinal, c.heading, c.text, c.hash, e) for c, e in zip(to_embed, embs)]
+        record = NoteRecord(rel, st.st_mtime, st.st_size, file_hash, note.title, note.tags, note.links, keep, [])
+        return _Pending(record, to_embed, "updated" if prev_hash else "new")
 
-        self.store.write_note(rel, st.st_mtime, st.st_size, file_hash, note.title, note.tags, note.links, keep, new)
-        log.info("Indexed %s (%d new chunks, %d reused)", rel, len(new), len(keep))
-        return "updated" if prev_hash else "new"
+    def _flush(self, batch: list[_Pending]) -> None:
+        """Embed the new chunks of several notes in one call, then write them in one transaction."""
+        # Embed "title — heading + text": helps a lot with short chunks
+        texts = [f"{p.record.title} — {c.heading}\n{c.text}" for p in batch for c in p.to_embed]
+        embs = iter(self.embedder.embed(texts) if texts else [])
+        for p in batch:
+            p.record.new = [(c.ordinal, c.heading, c.text, c.hash, next(embs)) for c in p.to_embed]
+        self.store.write_notes([p.record for p in batch])
+        for p in batch:
+            log.info("Indexed %s (%d new chunks, %d reused)", p.record.path, len(p.record.new), len(p.record.keep))
 
     def remove_file(self, abs_path: Path | str) -> None:
         rel = self.rel(abs_path)
@@ -105,27 +132,54 @@ class Indexer:
             self.index_file(Path(dest))
 
     def sync_all(self, on_progress: ProgressFn | None = None) -> dict[str, int]:
-        """Cheap full rescan: only opens files whose mtime or size changed."""
+        """Cheap full rescan: only opens files whose mtime or size changed.
+
+        Changed notes are not written one by one: their new chunks are gathered until there
+        are cfg.index_batch_chunks of them, then embedded in one call and written in one
+        transaction. Big batches keep the ONNX runtime busy and save a commit per note.
+        """
         known = self.store.file_state()
         counts = {"new": 0, "updated": 0, "unchanged": 0, "skipped": 0, "deleted": 0}
         present: set[str] = set()
         notes = list(self.iter_notes())
-        for i, p in enumerate(notes, 1):
+        done = 0
+        batch: list[_Pending] = []
+
+        def report(rel: str, status: str) -> None:
+            nonlocal done
+            done += 1
+            counts[status] += 1
+            if on_progress:
+                on_progress(done, len(notes), rel, status)
+
+        def flush() -> None:
+            if batch:
+                self._flush(batch)
+                for p in batch:
+                    report(p.record.path, p.status)
+                batch.clear()
+
+        for p in notes:
             rel = self.rel(p)
             present.add(rel)
             try:
                 st = p.stat()
             except OSError:
-                status = "skipped"
-            else:
-                prev = known.get(rel)
-                if prev and abs(prev[0] - st.st_mtime) < 1e-6 and prev[1] == st.st_size:
-                    status = "unchanged"
-                else:
-                    status = self.index_file(p)
-            counts[status] += 1
-            if on_progress:
-                on_progress(i, len(notes), rel, status)
+                report(rel, "skipped")
+                continue
+            prev = known.get(rel)
+            if prev and abs(prev[0] - st.st_mtime) < 1e-6 and prev[1] == st.st_size:
+                report(rel, "unchanged")
+                continue
+            prepared = self._prepare(p)
+            if isinstance(prepared, str):
+                report(rel, prepared)
+                continue
+            batch.append(prepared)
+            if sum(len(b.to_embed) for b in batch) >= self.cfg.index_batch_chunks:
+                flush()
+        flush()
+
         for rel in set(known) - present:
             self.store.delete_file(rel)
             counts["deleted"] += 1

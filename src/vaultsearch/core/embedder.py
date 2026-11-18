@@ -3,6 +3,7 @@
 The default model is multilingual (English, Spanish, Japanese, ...). The first
 run downloads ~220 MB from Hugging Face; after that it is cached.
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -17,14 +18,22 @@ class Embedder(Protocol):
 
 
 class FastEmbedder:
-    def __init__(self, model: str):
+    def __init__(self, model: str, batch_size: int = 8, threads: int | None = None):
         from fastembed import TextEmbedding
 
-        self._model = TextEmbedding(model)
+        self._model = TextEmbedding(model, threads=threads)
+        self.batch_size = batch_size
         self.dim = len(next(iter(self._model.embed(["dim"]))))
 
     def embed(self, texts: list[str]) -> list[list[float]]:
-        return [v.tolist() for v in self._model.embed(texts, batch_size=32)]
+        # Each ONNX batch is padded to its longest text, so feeding the texts sorted by
+        # length means short chunks no longer pay for a long neighbour.
+        order = sorted(range(len(texts)), key=lambda i: len(texts[i]))
+        vecs = self._model.embed([texts[i] for i in order], batch_size=self.batch_size)
+        out: list[list[float]] = [[] for _ in texts]
+        for i, v in zip(order, vecs):
+            out[i] = v.tolist()
+        return out
 
 
 class HashEmbedder:
@@ -44,7 +53,7 @@ class HashEmbedder:
         return out
 
 
-def make_embedder(kind: str, model: str) -> Embedder:
+def make_embedder(kind: str, model: str, batch_size: int = 8, threads: int | None = None) -> Embedder:
     if kind == "hash":
         return HashEmbedder()
-    return FastEmbedder(model)
+    return FastEmbedder(model, batch_size=batch_size, threads=threads)

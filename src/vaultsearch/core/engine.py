@@ -31,7 +31,9 @@ class Engine:
     def open(self) -> None:
         """Load the model and open the index, without syncing or watching."""
         log.debug("Loading embedding model (%s)...", self.cfg.embed_model)
-        embedder = make_embedder(self.cfg.embedder, self.cfg.embed_model)
+        embedder = make_embedder(
+            self.cfg.embedder, self.cfg.embed_model, self.cfg.embed_batch_size, self.cfg.embed_threads
+        )
         model_id = self.cfg.embed_model if self.cfg.embedder == "fastembed" else self.cfg.embedder
         self.store = Store(self.cfg.db_path, embedder.dim, model_id)
         self.indexer = Indexer(self.cfg, self.store, embedder)

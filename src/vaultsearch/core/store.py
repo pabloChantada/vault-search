@@ -5,6 +5,7 @@ import json
 import sqlite3
 import struct
 import threading
+from dataclasses import dataclass
 from pathlib import Path
 
 import sqlite_vec
@@ -16,6 +17,21 @@ def _pack(vec: list[float]) -> bytes:
     return struct.pack(f"{len(vec)}f", *vec)
 
 
+@dataclass
+class NoteRecord:
+    """Everything needed to (re)write one note's rows."""
+
+    path: str
+    mtime: float
+    size: int
+    file_hash: str
+    title: str
+    tags: list[str]
+    links: list[str]
+    keep: dict[int, tuple[int, str]]  # chunk_id -> (ordinal, heading) for chunks we keep
+    new: list[tuple[int, str, str, str, list[float]]]  # (ordinal, heading, text, hash, embedding)
+
+
 class Store:
     def __init__(self, db_path: Path, dim: int, model_id: str):
         db_path.parent.mkdir(parents=True, exist_ok=True)
@@ -25,6 +41,9 @@ class Store:
         sqlite_vec.load(self.db)
         self.db.enable_load_extension(False)
         self.db.execute("PRAGMA journal_mode=WAL")
+        # With WAL, NORMAL only skips the fsync on each commit: a power cut can lose the last
+        # transactions but never corrupts the file, and the index can always be rebuilt.
+        self.db.execute("PRAGMA synchronous=NORMAL")
         self.db.execute("PRAGMA foreign_keys=ON")
         # The watcher and the MCP server / TUI read and write from different threads
         self.lock = threading.RLock()
@@ -91,50 +110,45 @@ class Store:
         with self.lock:
             return {r["hash"]: r["id"] for r in self.db.execute("SELECT id, hash FROM chunks WHERE path=?", (path,))}
 
-    def write_note(
-        self,
-        path: str,
-        mtime: float,
-        size: int,
-        file_hash: str,
-        title: str,
-        tags: list[str],
-        links: list[str],
-        keep: dict[int, tuple[int, str]],  # chunk_id -> (ordinal, heading) for chunks we keep
-        new: list[tuple[int, str, str, str, list[float]]],  # (ordinal, heading, text, hash, embedding)
-    ) -> None:
+    def write_notes(self, records: list[NoteRecord]) -> None:
+        """Write several notes in a single transaction (one commit instead of one per note)."""
         with self.lock, self.db:
+            for rec in records:
+                self._write_note(rec)
+
+    def _write_note(self, rec: NoteRecord) -> None:
+        path, title, keep = rec.path, rec.title, rec.keep
+        self.db.execute(
+            """INSERT INTO files(path, mtime, size, hash, title, tags, links) VALUES (?,?,?,?,?,?,?)
+               ON CONFLICT(path) DO UPDATE SET mtime=excluded.mtime, size=excluded.size,
+               hash=excluded.hash, title=excluded.title, tags=excluded.tags, links=excluded.links""",
+            (path, rec.mtime, rec.size, rec.file_hash, title, json.dumps(rec.tags), json.dumps(rec.links)),
+        )
+        old_ids = [r["id"] for r in self.db.execute("SELECT id FROM chunks WHERE path=?", (path,))]
+        for cid in old_ids:
+            if cid not in keep:
+                self._delete_chunk(cid)
+        for cid, (ordinal, heading) in keep.items():
+            self.db.execute("UPDATE chunks SET ordinal=?, heading=? WHERE id=?", (ordinal, heading, cid))
+        # Refresh the title in FTS for kept chunks (the note may have been renamed)
+        for cid in keep:
+            r = self.db.execute("SELECT heading, text FROM chunks WHERE id=?", (cid,)).fetchone()
+            self.db.execute("DELETE FROM chunks_fts WHERE rowid=?", (cid,))
             self.db.execute(
-                """INSERT INTO files(path, mtime, size, hash, title, tags, links) VALUES (?,?,?,?,?,?,?)
-                   ON CONFLICT(path) DO UPDATE SET mtime=excluded.mtime, size=excluded.size,
-                   hash=excluded.hash, title=excluded.title, tags=excluded.tags, links=excluded.links""",
-                (path, mtime, size, file_hash, title, json.dumps(tags), json.dumps(links)),
+                "INSERT INTO chunks_fts(rowid, title, heading, text) VALUES (?,?,?,?)",
+                (cid, title, r["heading"], r["text"]),
             )
-            old_ids = [r["id"] for r in self.db.execute("SELECT id FROM chunks WHERE path=?", (path,))]
-            for cid in old_ids:
-                if cid not in keep:
-                    self._delete_chunk(cid)
-            for cid, (ordinal, heading) in keep.items():
-                self.db.execute("UPDATE chunks SET ordinal=?, heading=? WHERE id=?", (ordinal, heading, cid))
-            # Refresh the title in FTS for kept chunks (the note may have been renamed)
-            for cid in keep:
-                r = self.db.execute("SELECT heading, text FROM chunks WHERE id=?", (cid,)).fetchone()
-                self.db.execute("DELETE FROM chunks_fts WHERE rowid=?", (cid,))
-                self.db.execute(
-                    "INSERT INTO chunks_fts(rowid, title, heading, text) VALUES (?,?,?,?)",
-                    (cid, title, r["heading"], r["text"]),
-                )
-            for ordinal, heading, text, chash, emb in new:
-                cur = self.db.execute(
-                    "INSERT INTO chunks(path, ordinal, heading, text, hash) VALUES (?,?,?,?,?)",
-                    (path, ordinal, heading, text, chash),
-                )
-                cid = cur.lastrowid
-                self.db.execute(
-                    "INSERT INTO chunks_fts(rowid, title, heading, text) VALUES (?,?,?,?)",
-                    (cid, title, heading, text),
-                )
-                self.db.execute("INSERT INTO vec_chunks(rowid, embedding) VALUES (?, ?)", (cid, _pack(emb)))
+        for ordinal, heading, text, chash, emb in rec.new:
+            cur = self.db.execute(
+                "INSERT INTO chunks(path, ordinal, heading, text, hash) VALUES (?,?,?,?,?)",
+                (path, ordinal, heading, text, chash),
+            )
+            cid = cur.lastrowid
+            self.db.execute(
+                "INSERT INTO chunks_fts(rowid, title, heading, text) VALUES (?,?,?,?)",
+                (cid, title, heading, text),
+            )
+            self.db.execute("INSERT INTO vec_chunks(rowid, embedding) VALUES (?, ?)", (cid, _pack(emb)))
 
     def _delete_chunk(self, cid: int) -> None:
         self.db.execute("DELETE FROM chunks WHERE id=?", (cid,))

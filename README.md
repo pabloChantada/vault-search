@@ -145,6 +145,7 @@ A few decisions worth explaining:
 
 - **Hybrid search.** Embeddings find notes by meaning ("how was I studying" finds "review routine"), but they're bad at names and exact terms. BM25 is the opposite. Merging both rankings with Reciprocal Rank Fusion gets you the best of each, with no score tuning.
 - **Incremental indexing.** Every chunk is hashed. Edit one paragraph and only that paragraph gets re-embedded. Renaming or moving a note re-embeds nothing.
+- **Batched full builds.** A full index build gathers new chunks across many notes, sorts them by length (each ONNX batch is padded to its longest text) and embeds and writes them in large batches, one transaction each.
 - **The index lives outside the vault** (`~/.vaultsearch/`). If your vault syncs through iCloud or OneDrive, a database file inside it would get synced mid-write and eventually corrupted.
 - **A safety-net rescan.** Cloud-synced folders don't always fire file events reliably, so the watcher also does a cheap full rescan every 10 minutes. It only compares modification times, so it costs almost nothing.
 - **Local, multilingual embeddings.** The default model (`paraphrase-multilingual-MiniLM-L12-v2`, via ONNX) handles English, Spanish, Japanese and dozens more, runs on CPU and needs no API key.
@@ -158,6 +159,9 @@ A few decisions worth explaining:
 | `VAULT_PATH`        | —                                        | your vault (same as `--vault`)                                                                                         |
 | `VAULTSEARCH_DB`    | `~/.vaultsearch/<vault>-<hash>.db`      | where the index lives                                                                                                    |
 | `VAULTSEARCH_MODEL` | `paraphrase-multilingual-MiniLM-L12-v2` | any [fastembed text model](https://qdrant.github.io/fastembed/examples/Supported_Models/); changing it rebuilds the index |
+| `VAULTSEARCH_EMBED_BATCH` | `8` | texts per ONNX run |
+| `VAULTSEARCH_EMBED_THREADS` | onnxruntime default (physical cores) | ONNX threads; set it lower to leave CPU free while indexing |
+| `VAULTSEARCH_INDEX_BATCH` | `256` | new chunks gathered across notes before embedding and writing them |
 
 ## Development
 
@@ -167,6 +171,41 @@ uv run pytest
 ```
 
 The tests use a tiny fake embedder, so they run offline in a few seconds. That includes one that drives the TUI headlessly.
+
+### Benchmarking the indexer
+
+`scripts/bench_index.py` builds the index from scratch into a throwaway database (your real index is untouched), then runs a warm sync where nothing changed. It reports notes/s and how the time splits between parsing, embedding, SQLite writes and file reads:
+
+```bash
+uv run python scripts/bench_index.py --vault "<path>"            # add --json for raw numbers
+uv run scalene run scripts/bench_index.py --- --vault "<path>"   # Python vs native time, memory; then `scalene view`
+sudo uv run py-spy record -o index.svg -- python scripts/bench_index.py --vault "<path>"   # flame graph
+```
+
+Flags `--embed-batch`, `--index-batch` and `--threads` override the config for a run.
+
+#### Results
+
+Cold build of a real vault (417 notes, ~6,400 chunks, avg 438 chars) on a Windows laptop CPU (onnxruntime default thread count):
+
+| ONNX batch | index batch | embed (s) | chunks/s |
+| ---------: | ----------: | --------: | -------: |
+| 1          | 512         | 96.5      | 65.5     |
+| **8**      | **512**     | **80.8**  | **78.1** |
+| 8          | 128         | 81.3      | 77.6     |
+| 16         | 512         | 86.8      | 72.7     |
+| 32         | 512         | 111.6     | 56.5     |
+| 64         | 256         | 148.0     | 43.0     |
+
+What it shows:
+
+- **Embedding is ~98% of the time.** File reads, parsing and SQLite writes add up to ~1.5 s, so the indexer isn't I/O-bound, and moving the Python glue to another language wouldn't help: the hot loop already runs inside onnxruntime (C++).
+- **ONNX batch size follows a U-curve.** At batch 1 you lose vectorisation and pay per-call overhead. Above 8, padding and larger attention matrices (which grow with sequence length squared) cost more than batching saves. Texts are sorted by length before batching, which keeps padding low.
+- **Index batch doesn't matter.** 128 and 512 perform the same, so it only trades fewer SQLite transactions against memory.
+- **Threads: physical cores win.** On a 12-core / 24-thread CPU (batch 8): 4 threads → 131 s, 12 → 88 s, default ≈ 81 s. Going past the logical thread count (32) slows to a crawl from oversubscription. The default is left to onnxruntime; incremental edits embed only a few chunks, so capping threads buys little.
+- A warm sync (nothing changed) takes ~0.2 s, mostly reading and hashing files.
+
+Further speed-ups (an int8-quantised model, shorter chunks, multi-process `parallel=`, GPU) would each cost retrieval quality, RAM or a heavy dependency. For an index that is built once and then updated incrementally, that isn't worth it.
 
 ## Known limitations
 

@@ -38,3 +38,29 @@ def test_progress_callback(engine):
     engine.indexer.sync_all(on_progress=lambda done, total, rel, status: seen.append((done, total, status)))
     assert seen[-1][0] == seen[-1][1] == 2
     assert {s for *_, s in seen} == {"new"}
+
+
+def _count_embed_calls(engine):
+    calls = []
+    embed = engine.indexer.embedder.embed
+    engine.indexer.embedder.embed = lambda texts: calls.append(len(texts)) or embed(texts)
+    return calls
+
+
+def test_sync_batches_new_chunks_across_notes(engine):
+    engine.open()
+    calls = _count_embed_calls(engine)
+    engine.indexer.sync_all()
+    assert len(calls) == 1  # both notes fit in one batch
+    assert sum(calls) == engine.store.stats()["chunks"]
+
+
+def test_sync_flushes_when_the_batch_is_full(engine):
+    engine.cfg.index_batch_chunks = 1
+    engine.open()
+    calls = _count_embed_calls(engine)
+    seen = []
+    engine.indexer.sync_all(on_progress=lambda done, total, rel, status: seen.append(done))
+    assert len(calls) == 2  # one flush per note
+    assert seen == [1, 2]
+    assert engine.searcher.search("rain")[0].heading == "Kanji > N4"
