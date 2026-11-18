@@ -224,6 +224,17 @@ class Store:
             ).fetchall()
             return [r["path"] for r in rows]
 
+    def note_embeddings(self) -> tuple[list[sqlite3.Row], dict[str, list[bytes]]]:
+        """All notes plus their chunks' packed float32 embeddings, grouped by note path."""
+        with self.lock:
+            files = self.db.execute("SELECT path, title, tags, links FROM files ORDER BY path").fetchall()
+            paths = {r["id"]: r["path"] for r in self.db.execute("SELECT id, path FROM chunks")}
+            vecs: dict[str, list[bytes]] = {}
+            for r in self.db.execute("SELECT rowid, embedding FROM vec_chunks"):
+                if (p := paths.get(r["rowid"])) is not None:
+                    vecs.setdefault(p, []).append(r["embedding"])
+            return files, vecs
+
     def stats(self) -> dict:
         with self.lock:
             return {

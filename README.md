@@ -87,9 +87,16 @@ vaultsearch search "kanji compounds"   # print the top results
 vaultsearch search "habits" --tag reading -n 5
 vaultsearch status                     # index size and recently modified notes
 vaultsearch watch                      # keep the index fresh in the background
+vaultsearch map --open                 # 3D map of the vault in the browser
 ```
 
 `search` updates the index before searching (it's cheap), so results are never stale. Pass `--no-sync` to skip that step.
+
+### 3D map
+
+`vaultsearch map` writes a single HTML file (three.js, loaded from a CDN) with one point per note. Each note is the mean of its chunk embeddings, projected to 3D, so notes about similar things end up close together. Points are coloured by top-level folder and joined by their `[[links]]`. You can toggle folders, highlight notes by title, and click a point to open the note in Obsidian.
+
+The projection uses UMAP (cosine) when `umap-learn` is installed (`uv sync --extra viz`) and PCA otherwise. UMAP keeps local neighbourhoods and gives much clearer clusters; PCA needs no extra dependencies.
 
 ---
 
@@ -217,4 +224,3 @@ Further speed-ups (an int8-quantised model, shorter chunks, multi-process `paral
 - Boost results that are linked to other strong results (`[[links]]` as a ranking signal)
 - Date filters for journal notes
 - A cross-encoder reranker over the top 20
-- Export the vectors for a 3D map of the vault

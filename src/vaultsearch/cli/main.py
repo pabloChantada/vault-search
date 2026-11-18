@@ -1,4 +1,4 @@
-"""Entry point: `vaultsearch [ui|index|search|status|watch|serve]`."""
+"""Entry point: `vaultsearch [ui|index|search|status|watch|map|serve]`."""
 from __future__ import annotations
 
 import argparse
@@ -25,6 +25,12 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--no-sync", action="store_true", help="Don't update the index before searching")
     sub.add_parser("status", help="Index summary and recently modified notes")
     sub.add_parser("watch", help="Index and keep watching for changes (no MCP)")
+    mp = sub.add_parser("map", help="Export a 3D map of the vault (UMAP/PCA → three.js HTML)")
+    mp.add_argument("-o", "--out", default="vault-map.html", help="Output HTML file (default vault-map.html)")
+    mp.add_argument("--method", choices=["auto", "umap", "pca"], default="auto",
+                    help="auto = UMAP if umap-learn is installed, else PCA")
+    mp.add_argument("--no-sync", action="store_true", help="Don't update the index first")
+    mp.add_argument("--open", action="store_true", help="Open the map in the browser")
     sub.add_parser("serve", help="MCP server over stdio (launched by Claude Desktop)")
     return ap
 
@@ -70,6 +76,8 @@ def main(argv: list[str] | None = None) -> None:
             commands.cmd_search(cfg, args.query, args.limit, args.folder, args.tag, sync=not args.no_sync)
         elif cmd == "watch":
             commands.cmd_watch(cfg)
+        elif cmd == "map":
+            commands.cmd_map(cfg, args.out, args.method, sync=not args.no_sync, open_browser=args.open)
 
 
 if __name__ == "__main__":

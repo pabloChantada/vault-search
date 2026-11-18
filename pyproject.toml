@@ -16,6 +16,7 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["pytest>=8"]
+viz = ["umap-learn>=0.5"]  # better 3D layout for `vaultsearch map`; falls back to PCA without it
 
 [project.scripts]
 vaultsearch = "vaultsearch.cli.main:main"
