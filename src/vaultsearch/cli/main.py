@@ -30,8 +30,8 @@ def build_parser() -> argparse.ArgumentParser:
     mp.add_argument("--method", choices=["auto", "umap", "pca"], default="auto",
                     help="auto = UMAP if umap-learn is installed, else PCA")
     mp.add_argument("--no-sync", action="store_true", help="Don't update the index first")
-    mp.add_argument("--theme", choices=["sansui", "sumi", "yggdrasil"], default="sansui",
-                    help="sansui = 3D ink landscape; sumi = flat ink on paper; yggdrasil = a tree that grows with time")
+    mp.add_argument("--theme", choices=["sansui", "yggdrasil"], default="sansui",
+                    help="sansui = 3D ink landscape; yggdrasil = a tree that grows with time")
     mp.add_argument("--open", action="store_true", help="Open the map in the browser")
     sub.add_parser("serve", help="MCP server over stdio (launched by Claude Desktop)")
     return ap

@@ -39,7 +39,7 @@ def test_graph_has_one_node_per_note_and_resolves_links(engine):
 def test_write_html_embeds_the_data(engine, tmp_path):
     engine.open()
     engine.indexer.sync_all()
-    out = write_html(build_graph(engine.store, "pca"), tmp_path / "map.html", "SecondBrain", "sumi")
+    out = write_html(build_graph(engine.store, "pca"), tmp_path / "map.html", "SecondBrain", "sansui")
     html = out.read_text(encoding="utf-8")
     assert "/*__DATA__*/" not in html
     payload = html.split("const DATA = ", 1)[1].split(";\n", 1)[0]
@@ -55,7 +55,7 @@ def test_every_theme_renders_and_unknown_ones_fail(engine, tmp_path):
     engine.open()
     engine.indexer.sync_all()
     g = build_graph(engine.store, "pca")
-    assert set(available_themes()) == {"sansui", "sumi", "yggdrasil"}
+    assert set(available_themes()) == {"sansui", "yggdrasil"}
     for theme in available_themes():
         html = write_html(g, tmp_path / f"{theme}.html", "SecondBrain", theme).read_text(encoding="utf-8")
         assert "/*__DATA__*/" not in html
