@@ -1,0 +1,2681 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Vault in ink: mountains</title>
+<link rel="icon" href="data:,">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Shippori+Mincho:wght@400;600&family=Zen+Kaku+Gothic+New:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --washi: #ece7db;
+    --washi-deep: #e2dccd;
+    --sumi: #18181c;
+    --ash: #5c574c;
+    --vermilion: #b83a26;
+    --mincho: "Shippori Mincho", "Hiragino Mincho ProN", "Yu Mincho", "Noto Serif CJK JP", Georgia, "Times New Roman", serif;
+    --gothic: "Zen Kaku Gothic New", "Hiragino Sans", "Yu Gothic", "Noto Sans CJK JP", system-ui, sans-serif;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; overflow: hidden; color: var(--sumi); font: 400 14px/1.6 var(--gothic); background: var(--washi); }
+  canvas { display: block; position: fixed; inset: 0; outline: none; }
+  button, input { font: inherit; color: inherit; }
+  [hidden] { display: none !important; }
+  :focus-visible { outline: 1.5px solid var(--vermilion); outline-offset: 3px; }
+  /* a soft halo of paper keeps UI text legible where it crosses ink */
+  .brand, .views, #again, #folders, .caption, #hint { text-shadow: 0 0 3px var(--washi), 0 0 8px var(--washi), 0 0 14px var(--washi); }
+
+  .brand { position: fixed; top: 26px; left: 32px; max-width: 340px; }
+  .brand h1 { margin: 0; font: 600 34px/1.1 var(--mincho); letter-spacing: .02em; }
+  .brand p { margin: 4px 0 0; color: var(--ash); font-size: 13px; }
+  .brand #colophon { margin-top: 0; font-family: var(--mincho); font-size: 14px; white-space: nowrap; }
+  .search { margin-top: 16px; width: 230px; }
+  .search input { width: 100%; background: transparent; border: 0; border-bottom: 1px solid rgba(24, 24, 28, .35); padding: 5px 0; outline: none; font-family: var(--mincho); font-size: 16px; }
+  .search input::placeholder { color: var(--ash); }
+  .search input:focus { border-bottom-color: var(--sumi); }
+  .search input:focus-visible { outline: 1.5px solid var(--vermilion); outline-offset: 3px; }
+  #results { list-style: none; margin: 6px 0 0; padding: 0; }
+  #results button { background: none; border: 0; padding: 2px 0; cursor: pointer; font-family: var(--mincho); font-size: 15px; color: var(--ash); text-align: left; }
+  #results button:hover, #results button:focus-visible { color: var(--sumi); }
+
+  .seal { position: fixed; top: 26px; right: 32px; display: flex; justify-content: center; width: 46px; padding: 9px 0; background: var(--vermilion); color: var(--washi); font: 600 20px/1.15 var(--mincho); border-radius: 3px; filter: url(#rough); opacity: .92; transform: rotate(-2deg); transition: opacity .35s, transform .35s cubic-bezier(.3, 1.6, .5, 1); }
+  .seal span { writing-mode: vertical-rl; letter-spacing: .12em; }
+  .seal.unstamped { opacity: 0; transform: scale(1.25) rotate(-6deg); }
+
+  .views { position: fixed; top: 30px; right: 100px; display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 2px 18px; margin: 0; padding: 0; list-style: none; max-width: calc(100vw - 460px); }
+  .views button, #again { background: none; border: 0; border-bottom: 1px solid transparent; padding: 1px 0; cursor: pointer; font: 400 15px/1.4 var(--mincho); color: var(--ash); }
+  .views button:hover, #again:hover { color: var(--sumi); }
+  .views button[aria-pressed="true"] { color: var(--sumi); border-bottom-color: var(--sumi); }
+  #again { position: fixed; top: 64px; right: 100px; font: 400 13px/1.4 var(--gothic); border-bottom-color: rgba(92, 87, 76, .45); }
+  #hint { position: fixed; bottom: 28px; left: 50%; transform: translateX(-50%); margin: 0; color: var(--ash); font-size: 13px; pointer-events: none; transition: opacity .8s; }
+  #hint.gone { opacity: 0; }
+
+  #folders { position: fixed; left: 32px; bottom: 26px; display: flex; flex-wrap: wrap; gap: 4px 18px; max-width: 55vw; margin: 0; padding: 0; list-style: none; }
+  #folders button { display: flex; align-items: center; gap: 8px; background: none; border: 0; padding: 2px 0; cursor: pointer; font-family: var(--mincho); font-size: 16px; transition: opacity .3s; }
+  #folders button[aria-pressed="false"] { opacity: .32; }
+  #folders .dab { width: 16px; height: 9px; border-radius: 50% 40% 55% 45%; filter: url(#rough); }
+  #folders .n { color: var(--ash); font: 12px var(--gothic); }
+
+  .caption { position: fixed; right: 32px; bottom: 26px; max-width: 340px; margin: 0; color: var(--ash); font-size: 13px; text-align: right; }
+  .empty-note { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); max-width: 360px; margin: 0; color: var(--ash); font: 400 18px/1.6 var(--mincho); text-align: center; }
+
+  #panel { position: fixed; top: 120px; right: 32px; width: 290px; max-height: calc(100vh - 230px); overflow: auto; padding: 22px 22px 20px; background: rgba(226, 220, 205, .94); border-left: 2px solid var(--sumi); transition: opacity .35s, transform .35s; }
+  #panel.closed { opacity: 0; transform: translateY(8px); pointer-events: none; visibility: hidden; }
+  #panel h2 { margin: 0 26px 4px 0; font: 600 24px/1.2 var(--mincho); word-break: break-word; outline: none; }
+  #panel .path { margin: 0; color: var(--ash); font-size: 12px; word-break: break-word; }
+  #panel .edited { margin: 10px 0 0; font-size: 13px; }
+  #panel .tags { margin: 6px 0 0; color: var(--vermilion); font-size: 12px; }
+  #panel h3 { margin: 16px 0 4px; font-size: 12px; font-weight: 500; color: var(--ash); }
+  #panel ul { list-style: none; margin: 0; padding: 0; }
+  #panel li button { background: none; border: 0; padding: 2px 0; cursor: pointer; font: 400 16px/1.35 var(--mincho); text-align: left; }
+  #panel li button:hover, #panel li button:focus-visible { color: var(--vermilion); }
+  #panel .none { color: var(--ash); font-size: 13px; }
+  #panel .open { margin-top: 16px; background: none; border: 0; padding: 0; color: var(--vermilion); font: 600 15px var(--mincho); cursor: pointer; border-bottom: 1px solid currentColor; }
+  #panel .close { position: absolute; top: 12px; right: 12px; width: 28px; height: 28px; border: 0; background: none; font-size: 20px; color: var(--ash); cursor: pointer; }
+
+  #slips { position: fixed; inset: 0; pointer-events: none; }
+  .slip.sub { padding: 6px 3px; font: 400 13px/1 var(--mincho); background: rgba(236, 231, 219, .82); border-color: rgba(24, 24, 28, .35); }
+  .slip { position: absolute; left: 0; top: 0; writing-mode: vertical-rl; white-space: nowrap; padding: 9px 4px; font: 600 15px/1 var(--mincho); letter-spacing: .04em; color: var(--sumi); background: rgba(236, 231, 219, .9); border: 1px solid rgba(24, 24, 28, .6); outline: 1px solid rgba(236, 231, 219, .9); opacity: 0; transition: opacity .15s; }
+  /* years label a horizontal stratum, spots a place on a slope: both read across */
+  .slip.flat { writing-mode: horizontal-tb; padding: 2px 5px; font: 400 12px/1.2 var(--mincho); color: var(--ash); background: rgba(236, 231, 219, .82); border-color: rgba(92, 87, 76, .4); }
+  .slip.spot { font-style: italic; border-style: dashed; }
+  .hair { position: absolute; left: 0; top: 0; height: 1px; background: var(--sumi); transform-origin: 0 50%; opacity: 0; transition: opacity .15s; }
+  #stamp { position: fixed; pointer-events: none; border: 2.5px solid var(--vermilion); border-radius: 3px; filter: url(#rough); opacity: 0; transition: opacity .25s; }
+  #tip { position: fixed; pointer-events: none; font: 400 16px var(--mincho); background: rgba(236, 231, 219, .9); padding: 1px 6px; opacity: 0; transition: opacity .15s; white-space: nowrap; }
+  .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+  /* phones: "Paint again" steps aside for the open panel; the swipeable rows fade out at the right edge as a cue */
+  @media (max-width: 760px) {
+    body.panel-open #again { visibility: hidden; }
+    .views, #folders { -webkit-mask-image: linear-gradient(to right, #000 88%, transparent); mask-image: linear-gradient(to right, #000 88%, transparent); }
+  }
+  @media (max-width: 900px) {
+    .views { top: auto; bottom: 64px; right: 32px; max-width: 70vw; }
+    #again { top: 108px; right: 32px; }
+    .caption { display: none; }
+  }
+  @media (max-width: 760px) {
+    .brand h1 { font-size: 26px; }
+    #folders { max-width: none; right: 20px; left: 20px; bottom: 16px; }
+    #panel { left: 12px; right: 12px; width: auto; top: auto; bottom: 100px; max-height: 45vh; }
+    /* phones: brand clears the seal; viewpoints and folders become two swipeable rows at the bottom */
+    .brand { left: 20px; top: 18px; max-width: calc(100vw - 96px); }
+    .brand #colophon { white-space: normal; }
+    .seal { top: 18px; right: 20px; }
+    #again { top: auto; bottom: 96px; right: 20px; }
+    .views, #folders { left: 20px; right: 20px; max-width: none; flex-wrap: nowrap; justify-content: flex-start; overflow-x: auto; scrollbar-width: none; }
+    .views { top: auto; bottom: 56px; }
+    #folders { bottom: 14px; }
+    .views::-webkit-scrollbar, #folders::-webkit-scrollbar { display: none; }
+    .views button, #folders button { flex: none; white-space: nowrap; }
+  }
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <filter id="rough"><feTurbulence type="fractalNoise" baseFrequency="0.06" numOctaves="2" seed="2"/><feDisplacementMap in="SourceGraphic" scale="3"/></filter>
+</svg>
+
+<header class="brand">
+  <h1 id="vault"></h1>
+  <p id="counts"></p>
+  <p id="colophon"></p>
+  <div class="search">
+    <input id="q" type="search" placeholder="Find a note  /" aria-label="Find a note" autocomplete="off">
+    <ul id="results" aria-label="Matching notes"></ul>
+  </div>
+</header>
+
+<ul class="views" aria-label="Views">
+  <li><button data-view="above" aria-pressed="false" title="From above: the plan of the range, best for finding a note">From above</button></li>
+  <li><button data-view="deep" aria-pressed="false" title="Deep distance: looking over the near hills to the biggest folder, back and centre">Deep distance</button></li>
+  <li><button data-view="level" aria-pressed="false" title="Level distance: a low horizon, far ranges fade">Level distance</button></li>
+  <li><button data-view="high" aria-pressed="false" title="High distance: from the foot, looking up">High distance</button></li>
+  <li><button data-view="orbit" aria-pressed="false" title="Circle around: the camera slowly circles the whole range">Circle around</button></li>
+</ul>
+<div class="seal unstamped" id="seal" aria-hidden="true"><span>山水</span></div>
+<button id="again">Paint again</button>
+<p id="hint" class="gone">Press any key to finish the painting</p>
+
+<div id="slips" aria-hidden="true"></div>
+<div id="stamp"></div>
+<div id="tip" aria-hidden="true"></div>
+<p id="status" class="sr" role="status" aria-live="polite"></p>
+
+<aside id="panel" class="closed" aria-labelledby="p-title">
+  <button class="close" aria-label="Close">×</button>
+  <h2 id="p-title" tabindex="-1"></h2>
+  <p class="path" id="p-path"></p>
+  <p class="edited" id="p-edited"></p>
+  <p class="tags" id="p-tags"></p>
+  <h3 id="p-links-h">Linked notes</h3>
+  <ul id="p-links"></ul>
+  <button class="open" id="p-open">Open in Obsidian</button>
+</aside>
+
+<ul id="folders" aria-label="Folders: hover to see where a folder lies, click to hide it"></ul>
+<p class="caption">Each mountain is a top-level folder, and the bigger the folder, the taller it stands. Its peaks and ridges are subfolders and its strata are dated folders. Paths are [[links]], and pale marks are notes you haven't touched in a while.</p>
+
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
+} }
+</script>
+<script type="module">
+import * as THREE from "three";
+import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+
+const BOOT0 = performance.now();
+const DATA = /*__DATA__*/null;
+const $ = id => document.getElementById(id);
+// the template opened as is (no export yet) has DATA null: it shows the empty vault, not a stack trace
+const VAULT = DATA || {}, VAULT_NAME = VAULT.vault || "Your vault";
+const nodes = VAULT.nodes || [], links = VAULT.links || [], N = nodes.length;
+
+if (N === 0) showEmptyVault(); else paintVault();
+
+// An empty vault gets blank paper and one sentence, not a stack trace.
+function showEmptyVault() {
+  $("vault").textContent = VAULT_NAME;
+  document.title = `${VAULT_NAME} in ink: mountains`;
+  $("counts").textContent = "No notes yet";
+  for (const sel of [".search", ".views", "#again", "#folders", ".caption", "#panel"]) document.querySelector(sel).hidden = true;
+  const p = document.createElement("p");
+  p.className = "empty-note";
+  p.textContent = "There is nothing to paint yet. Once the vault has notes, they will rise here as mountains.";
+  document.body.appendChild(p);
+}
+
+function paintVault() {
+  // ======================================================================
+  // Constants
+  // ======================================================================
+  const DEG = Math.PI / 180;
+  const WORLD_SCALE = 100;            // UMAP [-1, 1] to world units
+  const GRID = 256;                   // heightfield cells per side
+  const LAND_MIN = 0.5;               // world height that counts as land
+  const ROOT = "(root)";
+  const RELIEF_MAX = 2.3;             // vertical exaggeration at low camera angles
+  const FOV = 24;                     // long lens: flattens depth, as sansui does
+  const HALF_FOV_TAN = Math.tan(FOV / 2 * DEG);
+  const CUN_CENTRES = 64;             // feature tops the cun strokes radiate from (the stress vault has 58)
+  const SELECT_DIST = [160, 420];     // camera distance range when flying to a selected note
+  const SELECT_POLAR = [45 * DEG, 62 * DEG];   // the selection camera keeps the current polar within this range…
+  const SELECT_FALLBACK = [45 * DEG, 35 * DEG]; // …and only drops to these when the note would be hidden
+  const SELECT_AZ = [0, 30, -30, 60, -60];     // degrees tried around the note's side of its feature
+  const PANEL_CLEAR_PX = 150;         // shift the selected note left of the panel by this much
+  const HIGH_POLAR = 84 * DEG;
+  const ORBIT_POLAR = 62 * DEG;
+  const ORBIT_PERIOD = 80;            // seconds per full circle in the "Circle around" view
+  const ORBIT_IDLE = 4;               // seconds of no input before the circling resumes
+  const ORBIT_EASE = 2;               // seconds to ease back to the orbit framing after a drag or zoom
+  const TURN_STEP = 45 * DEG;         // reduced motion: each "Turn around" press
+  const MAX_POLAR = 78 * DEG;
+  const PHONE_W = 760;
+  const SCROLL_OVERFLOW = 0.15;       // portrait: the near hills may run past each side edge by this share of the width                // the phone layout's breakpoint (CSS)
+  const PORTRAIT_BOOT = innerWidth < innerHeight;   // the composition is chosen once, for the shape of the screen at load
+  const reliefFor = polar => THREE.MathUtils.lerp(1, RELIEF_MAX, THREE.MathUtils.smoothstep(polar, 20 * DEG, 75 * DEG));
+
+  // Layout (DESIGN_V3 section 8; names and values match v3_proto.py, which validated them on the demo vaults)
+  const LAY = {
+    H_HOST: 44, HOST_RATIO: 1.6, GAMMA_H: 0.75, H_MIN: 0.3,       // host height; guests ∝ notes^0.75, host ≥ 1.6× next; the
+                                                                  // floor keeps the smallest crown above the valley mist (0.22)
+    R_HOST: 44, GAMMA_R: 0.5, R_MIN: 11,                          // footprint radius ∝ √notes
+    MID_SHARE: 0.4, MID_CAP: 4, MID_RING: [1.05, 1.0, 0.42, 0.36], // middle ring: A = a·Rh + b·Rm, B = c·Rh + d·Rm
+    NEAR_RING: [1.25, 0.5], VOID: [0.35, 0.8],                    // near ring step; empty lane at the front (× Rh)
+    THETA_MAX: [100, 120], ASYM: 0.2, KAPPA: 0.8, GAP: 3,          // ring arcs (deg), zigzag recession, feet overlap
+    FEATURE_SEP: 1.0,                                             // tops of two massifs' features: ≥ this × (wa + wb) apart
+    RELAX_PASSES: 400, ASPECT: 1.45, ASPECT_TOL: 0.08, FIT_PASSES: 6, LAMBDA: [0.75, 1.4],
+    PORTRAIT_ASPECT: 0.9, PORTRAIT_LAMBDA: [0.4, 1.4],             // a phone held upright: the distances stack like a hanging scroll
+    BODY_SHARE: 0.34, BODY_SIGMA: 0.62,                           // foothill body: share of h, σ × R
+    CROWN_W: 0.40, CROWN_W_RANGE: [5, 20], CROWN_E: 1.9, SUMMIT_E: 1.8, SHOULDER_E: 2.2, LOBE: 0.5,
+    KERNEL_CAP: 0.3, SHOULDER_CAP: 0.2,
+    MAX_SUMMITS: 4, MAX_SHOULDERS: 6, SUMMIT_MIN_SHARE: 0.12, SUMMIT_MIN_NOTES: 6,
+    SUMMIT_T: [0.50, 0.32], SUMMIT_RANK: [1, 0.88, 0.78], SUMMIT_W: [0.60, 0.35], SUMMIT_PROM: 0.15,
+    SUMMIT_SLOTS: { r: [-20, 50], l: [196, 128] },                 // degrees, 0 = +x, 90 = front
+    SHOULDER_T: [0.34, 0.22], SHOULDER_W: [0.40, 0.20], SHOULDER_W_RANGE: [2.5, 9], SHOULDER_PROM: 0.08,
+    SHOULDER_PROM_MIN: 2.2, SHOULDER_LONG: 1.5, SHOULDER_SPREAD: 40, SHOULDER_MIN_GAP: 36, SHOULDER_STEP: 18,
+    SPOT_MIN_GAP: 30, SPOT_STEP: 23, SPOT_R: [0.75, 0.9], SPOT_W: 0.3,
+    CROWN_FLANK: 100,                                             // a crown with strata sends its spurs out at 90 ± this (deg)
+    RIDGE_W: 0.55, RIDGE_SAG: 0.04, CHORD: 1.3, CHILD_SAMPLES: 600, LIFT_AT: 0.9, LIFT_LIMIT: 1.6,
+    TERRACE_SPAN: [0.16, 0.84], TERRACE_REACH: [2.6, 10], TERRACE_SECTOR: 75, TERRACE_FEATHER: 20, TERRACE_MIX: 0.92, TERRACE_MIN: 0.05,
+    STAIR_YEAR: [0.18, 0.62], STAIR_MONTH: [0.45, 0.78],          // g(τ) = α·τ + (1−α)·smoothstep(s₀, 1, τ)
+    CLEFT: 0.32, CLEFT_MASK: [0.9, 1.5], SMAX_K: 0.05, SEA: 0.012, GRID_PAD: 24, GRID_EXT: 1.25,
+    MIST: [0.17, 0.05], AZ: 0.18, POLAR: 55 * DEG, LEVEL_POLAR: 76 * DEG,
+  };
+  const H_MIST = LAY.MIST[0] * LAY.H_HOST;                         // valley mist band: every saddle between massifs lies below it
+  const FINISHED_DRAW = 2;            // uDraw sentinel: past every reveal time, so no brush front is drawn
+  const SEQ = { paper: 0.4, gou: 4.4, ran: 5.8, paths: 6.9, end: 7.5 };   // the drawing, in seconds
+  const STORE_KEY = "vaultsearch.sansui.painted";
+  const BASE_INKS = ["#18181c", "#24345a", "#5b4630", "#33503f", "#5a2f3f", "#3d4a5c", "#6a5524", "#4a3a5e", "#2f4f55", "#5c3b2a"];
+  const VERMILION = new THREE.Color("#b83a26");
+
+  const hash = location.hash;
+  const debug = /debug/.test(hash);   // test hooks (window.__dbg, #paint=) only with #debug in the URL
+  const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const still = reduced || hash.includes("still");
+  const { clamp, lerp, smoothstep } = THREE.MathUtils;
+  const k01 = (t, a, b) => clamp((t - a) / (b - a), 0, 1);
+  const ease = t => t < .5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+  const hash2 = (x, y) => { const s = Math.sin(x * 127.1 + y * 311.7) * 43758.5453; return s - Math.floor(s); };
+  function vnoise(x, y) {
+    const ix = Math.floor(x), iy = Math.floor(y); let fx = x - ix, fy = y - iy;
+    fx = fx * fx * (3 - 2 * fx); fy = fy * fy * (3 - 2 * fy);
+    const a = hash2(ix, iy), b = hash2(ix + 1, iy), c = hash2(ix, iy + 1), d = hash2(ix + 1, iy + 1);
+    return a + (b - a) * fx + (c - a) * fy + (a - b - c + d) * fx * fy;
+  }
+
+  // ======================================================================
+  // Data: semantic positions, links, time
+  // ======================================================================
+  // Semantic position is the 2D UMAP (pos2). Older exports fall back to PCA of the 3D UMAP.
+  function pca2(P) {
+    const m = [0, 0, 0];
+    P.forEach(p => { for (let d = 0; d < 3; d++) m[d] += p[d] / P.length; });
+    const C = [[0, 0, 0], [0, 0, 0], [0, 0, 0]];
+    P.forEach(p => { for (let a = 0; a < 3; a++) for (let b = 0; b < 3; b++) C[a][b] += (p[a] - m[a]) * (p[b] - m[b]); });
+    const power = deflate => {
+      let v = [1, 0.7, 0.3];
+      for (let it = 0; it < 60; it++) {
+        let w = [0, 1, 2].map(a => C[a][0] * v[0] + C[a][1] * v[1] + C[a][2] * v[2]);
+        if (deflate) { const d = w[0] * deflate[0] + w[1] * deflate[1] + w[2] * deflate[2]; w = w.map((x, i) => x - d * deflate[i]); }
+        const l = Math.hypot(...w) || 1; v = w.map(x => x / l);
+      }
+      return v;
+    };
+    const e1 = power(null), e2 = power(e1);
+    const out = P.map(p => { const q = [0, 1, 2].map(d => p[d] - m[d]); return [q[0] * e1[0] + q[1] * e1[1] + q[2] * e1[2], q[0] * e2[0] + q[1] * e2[1] + q[2] * e2[2]]; });
+    const mx = Math.max(...out.flat().map(Math.abs)) || 1;
+    return out.map(([a, b]) => [a / mx, b / mx]);
+  }
+  const P2 = nodes.every(n => Array.isArray(n.pos2)) ? nodes.map(n => n.pos2) : pca2(nodes.map(n => n.pos || [0, 0, 0]));
+  nodes.forEach((n, i) => {
+    n.ux = P2[i][0] * WORLD_SCALE; n.uz = -P2[i][1] * WORLD_SCALE;   // semantic position on the paper
+    n.tags = n.tags || []; n.folder = n.folder || ROOT; n.path = n.path || n.title || "";
+  });
+
+  const adj = nodes.map(() => []);
+  links.forEach(([a, b]) => { adj[a].push(b); adj[b].push(a); });
+  const deg = adj.map(a => a.length);
+
+  // Without any dates, recency means nothing: every note is drawn as fresh and the colophon is hidden.
+  const hasDates = nodes.some(n => n.created || n.mtime);
+  [...nodes.keys()].sort((a, b) => (nodes[a].mtime || 0) - (nodes[b].mtime || 0))
+    .forEach((i, r) => { nodes[i].recency = hasDates && N > 1 ? r / (N - 1) : 1; });
+  // Birth u: half real time, half rank (iCloud copies produce bursts of identical dates).
+  const bornAt = i => nodes[i].created || nodes[i].mtime || 0;
+  const byBirth = [...nodes.keys()].sort((a, b) => bornAt(a) - bornAt(b));
+  const firstT = bornAt(byBirth[0]), lastBornT = bornAt(byBirth[N - 1]);
+  const rankU = r => N > 1 ? r / (N - 1) : 1;
+  byBirth.forEach((i, r) => { nodes[i].u = 0.5 * (lastBornT > firstT ? (bornAt(i) - firstT) / (lastBornT - firstT) : rankU(r)) + 0.5 * rankU(r); });
+  const quantileU = (ids, q) => { if (!ids.length) return 1; const us = ids.map(i => nodes[i].u).sort((a, b) => a - b); return us[Math.floor((us.length - 1) * q)]; };
+
+  // ======================================================================
+  // Folder inks: the ten muted base inks, then generated ones, every pair at least ΔE 10 apart
+  // ======================================================================
+  function toLab(c) {
+    const lin = [c.r, c.g, c.b];   // THREE.Color stores linear sRGB
+    const X = (lin[0] * .4124 + lin[1] * .3576 + lin[2] * .1805) / .95047, Y = lin[0] * .2126 + lin[1] * .7152 + lin[2] * .0722, Z = (lin[0] * .0193 + lin[1] * .1192 + lin[2] * .9505) / 1.08883;
+    const f = v => v > .008856 ? Math.cbrt(v) : 7.787 * v + 16 / 116;
+    return [116 * f(Y) - 16, 500 * (f(X) - f(Y)), 200 * (f(Y) - f(Z))];
+  }
+  const deltaE = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
+  function makeInks(count) {
+    const out = [], labs = [];
+    const tryAdd = c => { const l = toLab(c); if (labs.every(m => deltaE(l, m) >= 10)) { out.push(c); labs.push(l); } };
+    BASE_INKS.forEach(h => out.length < count && tryAdd(new THREE.Color(h)));
+    for (let k = 0; out.length < count && k < 2000; k++) {
+      // muted like the base inks: hue by the golden ratio, low saturation, dark
+      tryAdd(new THREE.Color().setHSL((k * 0.618034) % 1, 0.2 + 0.15 * ((k * 7) % 5) / 4, 0.17 + 0.1 * ((k * 3) % 4) / 3, THREE.SRGBColorSpace));
+    }
+    while (out.length < count) out.push(new THREE.Color(BASE_INKS[out.length % BASE_INKS.length]));   // unreachable in practice
+    return out;
+  }
+  const folderCount = {};
+  nodes.forEach(n => { folderCount[n.folder] = (folderCount[n.folder] || 0) + 1; });
+  const folders = Object.keys(folderCount).sort((a, b) => folderCount[b] - folderCount[a]);
+  const inkList = makeInks(folders.length);
+  const ink = Object.fromEntries(folders.map((f, i) => [f, inkList[i]]));
+  // Notes at the vault root form a small massif of their own: every note then sits on its folder's mountain,
+  // and the root can be found, hidden and washed from the legend like any folder.
+  const folderLabel = f => f === ROOT ? "Root notes" : f;
+
+  // a binary min-heap of [priority, value]: the saddle flood and the trail router
+  class MinHeap {
+    constructor() { this.items = []; }
+    get size() { return this.items.length; }
+    push(priority, value) {
+      const a = this.items; a.push([priority, value]);
+      for (let i = a.length - 1; i > 0;) {
+        const p = (i - 1) >> 1;
+        if (a[p][0] <= a[i][0]) break;
+        [a[p], a[i]] = [a[i], a[p]]; i = p;
+      }
+    }
+    pop() {
+      const a = this.items, top = a[0], last = a.pop();
+      if (a.length) {
+        a[0] = last;
+        for (let i = 0; ;) {
+          const l = 2 * i + 1, r = l + 1; let m = i;
+          if (l < a.length && a[l][0] < a[m][0]) m = l;
+          if (r < a.length && a[r][0] < a[m][0]) m = r;
+          if (m === i) break;
+          [a[m], a[i]] = [a[i], a[m]]; i = m;
+        }
+      }
+      return top[1];
+    }
+  }
+
+  // ======================================================================
+  // Folder tree
+  // ======================================================================
+  const tops = new Map();
+  const newFolder = (name, chain, parent) => ({ name, chain, parent, children: new Map(), direct: [], notes: [], ux: 0, uz: 0, date: false, feat: null, alias: null, band: null });
+  nodes.forEach((n, i) => {
+    const parts = n.path.split("/").slice(0, -1);
+    const sub = n.folder === ROOT ? [] : parts[0] === n.folder ? parts.slice(1) : parts;
+    if (!tops.has(n.folder)) tops.set(n.folder, newFolder(n.folder, [n.folder], null));
+    let f = tops.get(n.folder);
+    f.notes.push(i);
+    for (const name of sub) {
+      if (!f.children.has(name)) f.children.set(name, newFolder(name, [...f.chain, name], f));
+      f = f.children.get(name); f.notes.push(i);
+    }
+    f.direct.push(i); n.home = f;
+  });
+  const walk = (f, fn) => { fn(f); f.children.forEach(c => walk(c, fn)); };
+  const cmpStr = (a, b) => a < b ? -1 : a > b ? 1 : 0;   // code-point order, as the prototype
+  const bySize = (a, b) => b.notes.length - a.notes.length || cmpStr(a.name, b.name);
+  const byName = (a, b) => cmpStr(a.name, b.name);
+  tops.forEach(t => walk(t, f => {   // the semantic centroid of every folder's subtree
+    f.notes.forEach(i => { f.ux += nodes[i].ux / f.notes.length; f.uz += nodes[i].uz / f.notes.length; });
+  }));
+  // Date-like folders (years, YYYY-MM, and months under a year or among ≥ 2 month-like siblings, so "Proyectos/3"
+  // stays a folder) never become peaks: they are laid as strata on the feature of their nearest non-date ancestor.
+  const DATE_Y = /^(19|20)\d\d$/, DATE_YM = /^(19|20)\d\d[-_.](0[1-9]|1[0-2])$/, DATE_M = /^(0?[1-9]|1[0-2])$/;
+  tops.forEach(t => walk(t, f => {
+    if (!f.parent) return;
+    const monthSibs = [...f.parent.children.keys()].filter(s => DATE_M.test(s)).length;
+    f.date = DATE_Y.test(f.name) || DATE_YM.test(f.name) || (DATE_M.test(f.name) && (DATE_Y.test(f.parent.name) || monthSibs >= 2));
+  }));
+  const nondate = f => [...f.children.values()].filter(c => !c.date).sort(bySize);
+  const datekids = f => [...f.children.values()].filter(c => c.date).sort(byName);
+  // a pass-through folder (one non-date child, < 10% of its notes directly in it) merges with its child: "A / B"
+  function collapse(f) {
+    while (f.children.size === 1 && f.direct.length < 0.1 * f.notes.length) {
+      const c = [...f.children.values()][0];
+      if (c.date) break;
+      f.name = `${f.name} / ${c.name}`;
+      f.direct = f.direct.concat(c.direct);
+      c.alias = f;
+      f.children = c.children;
+      f.children.forEach(cc => { cc.parent = f; });
+    }
+    return f;
+  }
+
+  // ======================================================================
+  // Composition (DESIGN_V3): the folder tree painted as a three-distance landscape
+  // ======================================================================
+  // One massif per top-level folder. The biggest is the host, back and centre; the others are guests on arcs in front
+  // of it (middle and near distance), ordered left to right by meaning. Inside a massif the folder itself is the crown,
+  // its biggest subfolders are guest summits beside it, smaller ones ridge shoulders and named spots, and dated folders
+  // strata. Every summit and shoulder is placed so that it keeps its own prominence above the saddle to its parent.
+  const seedOf = s => [...s].reduce((a, c) => a + c.codePointAt(0), 0) % 997;
+  const angDist = (a, b) => Math.abs((((a - b + 180) % 360) + 360) % 360 - 180);   // degrees
+  const kernel = (r, h, w, e, cap) => { const c = cap * w; return h * Math.exp(-Math.pow(Math.sqrt(r * r + c * c) / w, e) + Math.pow(c / w, e)); };
+  function kernelInv(s, h, w, e, cap) {   // the radius at which kernel(r) = s
+    if (s >= h) return 0;
+    const c = cap * w, q = w * Math.pow(Math.pow(c / w, e) - Math.log(s / h), 1 / e);
+    return Math.sqrt(Math.max(q * q - c * c, 0));
+  }
+  function smax(a, b, k) {   // polynomial smooth max; the blend fades out near sea level, so empty paper stays at 0
+    const kk = clamp(Math.min(a, b), 1e-6, k), hh = Math.max(kk - Math.abs(a - b), 0) / kk;
+    return Math.max(a, b) + hh * hh * kk * 0.25;
+  }
+  const lobe = (f, th) => 1 + LAY.LOBE * (vnoise(Math.cos(th) * 1.3 + f.seed * 0.37, Math.sin(th) * 1.3 + 7) - 0.5)
+    + 0.4 * LAY.LOBE * (vnoise(Math.cos(th) * 3.1 + 3, Math.sin(th) * 3.1 + f.seed * 0.11) - 0.5);
+  // one feature: its kernel (lobed for crowns and summits: buttresses; elongated along the spur for shoulders), plus the
+  // saddle ridge that ties it to its parent, so the real saddle is the designed one
+  function featEval(f, x, z) {
+    const dx = x - f.x, dz = z - f.z;
+    let v;
+    if (f.kind === "shoulder") {
+      const u = dx * f.ca + dz * f.sa, w = -dx * f.sa + dz * f.ca;
+      v = kernel(Math.hypot(u / LAY.SHOULDER_LONG, w), f.h, f.w, f.e, LAY.SHOULDER_CAP);
+    } else v = kernel(Math.hypot(dx, dz) * lobe(f, Math.atan2(dz, dx)), f.h, f.w, f.e, LAY.KERNEL_CAP);
+    const p = f.parent;
+    if (p) {
+      const sx = f.x - p.x, sz = f.z - p.z, t = clamp(((x - p.x) * sx + (z - p.z) * sz) / (sx * sx + sz * sz), 0, 1);
+      const lat = Math.hypot(x - (p.x + t * sx), z - (p.z + t * sz)) / (LAY.RIDGE_W * f.w);
+      v = Math.max(v, f.s * (1 - LAY.RIDGE_SAG * Math.sin(Math.PI * t)) * Math.exp(-lat * lat));
+    }
+    return v;
+  }
+  const bodyEval = (m, x, z) => { const s = LAY.BODY_SIGMA * m.R; return m.h * LAY.BODY_SHARE * Math.exp(-((x - m.x) ** 2 + (z - m.z) ** 2) / (s * s)); };
+
+  let featCount = 0;
+  const featById = [];
+  function newFeat(o) {
+    const f = { id: featCount++, seed: seedOf(o.name), ...o };
+    f.ca = Math.cos(f.ang * DEG); f.sa = Math.sin(f.ang * DEG);
+    featById[f.id] = f;
+    return f;
+  }
+  // put child c on parent feature pf along `ang` (degrees) so that its designed saddle `sad` is the real one: the
+  // parent's envelope (kernel and massif body) must have dropped below `sad` before the child's own kernel rises above it
+  function placeChild(m, pf, c, top, sad, w, e, kind, ang, depth, siblings) {
+    const ca = Math.cos(ang * DEG), sa = Math.sin(ang * DEG), n = LAY.CHILD_SAMPLES, rmax = 2.5 * m.R + 3 * pf.w;
+    const rr = [], env = [];
+    for (let i = 0; i < n; i++) {
+      const r = rmax * i / (n - 1), x = pf.x + r * ca, z = pf.z + r * sa;
+      rr.push(r); env.push(Math.max(featEval(pf, x, z), bodyEval(m, x, z)));
+    }
+    let j = env.findIndex(v => v <= sad * 0.98);
+    if (j < 0 || rr[j] > LAY.LIFT_LIMIT * m.R) {   // the body stays above the saddle: lift the child
+      let at = rr.findIndex(r => r >= LAY.LIFT_AT * m.R); if (at < 0) at = n - 1;
+      const lift = env[at] + 0.6 - sad;
+      sad += lift; top += lift;
+      j = env.findIndex(v => v <= sad * 0.98); if (j < 0) j = n - 1;
+    }
+    const rC = kernelInv(sad, top, w, e, LAY.KERNEL_CAP) * (kind !== "shoulder" ? 1 + 0.5 * LAY.LOBE : LAY.SHOULDER_LONG);
+    let d = rr[j] + rC + 0.3 * w;
+    const f = newFeat({ kind, folder: c, h: top, s: sad, w, e, parent: pf, depth, name: c.name, ang });
+    for (let it = 0; it < 40; it++) {   // sibling summits keep a minimum chord
+      f.x = pf.x + d * ca; f.z = pf.z + d * sa;
+      if (siblings.every(o => Math.hypot(f.x - o.x, f.z - o.z) >= LAY.CHORD * (f.w + o.w) / 2)) break;
+      d += 0.1 * w;
+    }
+    c.feat = f;
+    return f;
+  }
+  const stair = (t, strong) => {   // a stratum's profile: a tread, then a riser (strong for years, faint for months)
+    const [a, s0] = strong ? LAY.STAIR_YEAR : LAY.STAIR_MONTH, ss = smoothstep(t, s0, 1);
+    return a * t + (1 - a) * ss;
+  };
+  const allBands = [];
+  const terraceReach = f => LAY.TERRACE_REACH[0] * f.w + LAY.TERRACE_REACH[1];   // how far a feature's strata reach
+  const TERRACE_BLUR = 2;      // cells
+  const STRATA_CLEFT = 0.08;   // cleft depth kept on a strata face (a cleft as deep as a band would break every ledge)
+  // the camera-facing sector of a feature that carries strata (±75° of the front, feathered by 20°)
+  const terraceSector = (f, x, z) => clamp((LAY.TERRACE_SECTOR + LAY.TERRACE_FEATHER - angDist(Math.atan2(z - f.z, x - f.x) / DEG, 90)) / (2 * LAY.TERRACE_FEATHER), 0, 1);
+  // a massif's features, in local coordinates (the massif at the origin, +z towards the default camera)
+  function buildMassif(m) {
+    const top = m.tree, h = m.h, R = m.R, nM = top.notes.length;
+    m.x = m.z = 0;
+    const wc = clamp(LAY.CROWN_W * R, ...LAY.CROWN_W_RANGE);
+    const crown = newFeat({ kind: "crown", folder: top, x: 0, z: 0, h, s: 0, w: wc, e: LAY.CROWN_E, parent: null, depth: 0, name: top.name, ang: 90 });
+    top.feat = crown;
+    const feats = [crown], terr = [];
+    const kids = nondate(top).map(collapse);
+    const summits = kids.filter(c => c.notes.length >= LAY.SUMMIT_MIN_SHARE * nM && c.notes.length >= LAY.SUMMIT_MIN_NOTES).slice(0, LAY.MAX_SUMMITS - 1);
+    // summit slots: right-behind, left-front, then the front diagonal of the emptier side; the first summit takes the
+    // side of its semantic offset
+    let nr = 0, nl = 0;
+    summits.forEach((c, k) => {
+      const right = c.ux - top.ux >= 0;
+      const ang = (right && nr < 2 && nr <= nl) || nl >= 2 ? LAY.SUMMIT_SLOTS.r[nr++] : LAY.SUMMIT_SLOTS.l[nl++];
+      const share = c.notes.length / nM;
+      const t = h * (LAY.SUMMIT_T[0] + LAY.SUMMIT_T[1] * Math.sqrt(share)) * LAY.SUMMIT_RANK[k];
+      const w = wc * (LAY.SUMMIT_W[0] + LAY.SUMMIT_W[1] * Math.sqrt(share));
+      feats.push(placeChild(m, crown, c, t, t - LAY.SUMMIT_PROM * h, w, LAY.SUMMIT_E, "summit", ang, 1, feats.filter(x => x.kind !== "shoulder")));
+    });
+    // the MAX_SHOULDERS biggest remaining non-date folders (any depth) become shoulders; the rest are named spots
+    const pool = [];
+    const collect = f => { for (let c of nondate(f)) { c = collapse(c); if (!summits.includes(c)) pool.push(c); collect(c); } };
+    collect(top);
+    const keep = new Set(pool.slice().sort((a, b) => b.notes.length - a.notes.length || a.chain.length - b.chain.length || cmpStr(a.name, b.name)).slice(0, LAY.MAX_SHOULDERS));
+    const spots = pool.filter(c => !keep.has(c));
+    const strataCrown = datekids(top).length > 0;
+    // spurs fan out from `prefer`; on a crown that carries strata they start on the flanks, leaving the face to the ledges
+    const addShoulders = (pf, fkids, prefer) => {
+      const taken = feats.filter(x => x.parent === pf).map(x => x.ang), flanks = pf === crown && strataCrown;
+      fkids.filter(c => keep.has(c)).forEach((c, j) => {
+        let ang = flanks ? prefer + (j % 2 ? -1 : 1) * (LAY.CROWN_FLANK + Math.floor(j / 2) * LAY.SHOULDER_SPREAD)
+          : prefer + Math.floor((j + 1) / 2) * (j % 2 ? 1 : -1) * LAY.SHOULDER_SPREAD;
+        for (let it = 0; it < 20 && !taken.every(t => angDist(ang, t) >= LAY.SHOULDER_MIN_GAP); it++) ang += LAY.SHOULDER_STEP;
+        taken.push(ang);
+        const share = c.notes.length / Math.max(1, pf.folder.notes.length);
+        const t = pf.h * (LAY.SHOULDER_T[0] + LAY.SHOULDER_T[1] * Math.sqrt(share));
+        const w = clamp(pf.w * (LAY.SHOULDER_W[0] + LAY.SHOULDER_W[1] * Math.sqrt(share)), ...LAY.SHOULDER_W_RANGE);
+        const f = placeChild(m, pf, c, t, t - Math.max(LAY.SHOULDER_PROM * pf.h, LAY.SHOULDER_PROM_MIN), w, LAY.SHOULDER_E, "shoulder", ang, pf.depth + 1, []);
+        feats.push(f);
+        addShoulders(f, nondate(c).map(collapse), ang);   // a shoulder's child continues down the same spur
+        if (datekids(c).length) terr.push([f, datekids(c)]);
+      });
+    };
+    for (const f of feats.slice()) if (f.kind === "summit") {
+      addShoulders(f, nondate(f.folder).map(collapse), f.ang);
+      if (datekids(f.folder).length) terr.push([f, datekids(f.folder)]);
+    }
+    addShoulders(crown, kids.filter(c => !summits.includes(c)), 90);   // crown spurs point at the camera first
+    if (datekids(top).length) terr.push([crown, datekids(top)]);
+    // named spots: no relief, a place on the nearest feature's upper slope
+    const spotFeats = [];
+    for (const c of spots.sort((a, b) => a.chain.length - b.chain.length || b.notes.length - a.notes.length || cmpStr(a.name, b.name))) {
+      let p = c.parent;
+      while (!p.feat) p = p.parent;
+      const pf = p.feat, taken = [...feats, ...spotFeats].filter(x => x.parent === pf).map(x => x.ang);
+      let ang = pf.kind !== "crown" ? pf.ang : strataCrown ? 90 + LAY.CROWN_FLANK : 90;
+      for (let it = 0; it < 20 && !taken.every(t => angDist(ang, t) >= LAY.SPOT_MIN_GAP); it++) ang += LAY.SPOT_STEP;
+      const r = LAY.SPOT_R[pf.kind === "crown" ? 1 : 0] * pf.w;
+      const f = newFeat({ kind: "spot", folder: c, x: pf.x + r * Math.cos(ang * DEG), z: pf.z + r * Math.sin(ang * DEG), h: 0, s: 0, w: pf.w * LAY.SPOT_W, e: 2, parent: pf, depth: pf.depth + 1, name: c.name, ang });
+      c.feat = f; spotFeats.push(f);
+    }
+    // strata: chronological bands between 16% and 84% of the feature's height, thickness ∝ notes, months inside years
+    for (const [f, dk] of terr) {
+      const leaves = [];
+      for (const y of dk) {
+        const sub = datekids(y);
+        if (sub.length) sub.forEach((mo, j) => leaves.push({ folder: mo, n: mo.notes.length, strong: j === sub.length - 1, year: y }));
+        else leaves.push({ folder: y, n: y.notes.length, strong: true, year: y });
+      }
+      const lo = LAY.TERRACE_SPAN[0] * f.h, hi = LAY.TERRACE_SPAN[1] * f.h, tot = leaves.reduce((s, l) => s + l.n, 0) || 1;
+      const ths = leaves.map(l => Math.max(LAY.TERRACE_MIN * f.h, (hi - lo) * l.n / tot)), sum = ths.reduce((s, v) => s + v, 0);
+      let edge = lo;
+      f.bands = leaves.map((l, j) => {
+        const a = edge, b = edge + ths[j] * (hi - lo) / sum;
+        edge = b;
+        const B = { id: allBands.length, j, f, a, b, strong: l.strong, folder: l.folder, year: l.year, firstU: quantileU(l.folder.notes, 0) };
+        l.folder.band = B; allBands.push(B);
+        return B;
+      });
+      f.years = new Map();
+      for (const B of f.bands) { const [a, b] = f.years.get(B.year) || [B.a, B.b]; f.years.set(B.year, [Math.min(a, B.a), Math.max(b, B.b)]); }
+      f.years.forEach(([a, b], y) => { if (!y.band) y.band = { f, a, b }; });   // notes directly in a year sit on its whole span
+      const yearList = [...f.years.keys()];
+      for (const B of f.bands) { const [ya, yb] = f.years.get(B.year); Object.assign(B, { yi: yearList.indexOf(B.year), ya, yb }); }
+    }
+    m.feats = feats; m.terr = terr; m.spotFeats = spotFeats;
+    m.Reff = Math.max(R, ...feats.map(f => Math.hypot(f.x, f.z) + 1.2 * f.w));
+    for (const f of [...feats, ...spotFeats]) { f.lx = f.x; f.lz = f.z; }
+  }
+
+  // Sizes, then rings around the host: ring 1 (middle distance) holds the next 40% of guests, ring 2 (near) the rest,
+  // with an empty lane at the front centre; then relaxation (the host never moves), then fit the frame's shape.
+  const composition = (() => {
+    const ms = [...tops.values()].sort(bySize);
+    const n1 = ms[0].notes.length, n2 = ms.length > 1 ? ms[1].notes.length : n1;
+    const out = ms.map((t, i) => {
+      const n = t.notes.length;
+      const h = Math.max(i === 0 ? LAY.H_HOST : LAY.H_HOST / Math.max(LAY.HOST_RATIO, Math.pow(n1 / n2, LAY.GAMMA_H)) * Math.pow(n / n2, LAY.GAMMA_H), LAY.H_MIN * LAY.H_HOST);
+      return { id: i, rank: i, tree: t, folder: t.name, n, h, R: Math.max(LAY.R_HOST * Math.pow(n / n1, LAY.GAMMA_R), LAY.R_MIN), x: 0, z: 0, band: 0, s: 0 };
+    });
+    out.forEach(buildMassif);
+    const host = out[0], guests = out.slice(1), Rh = host.Reff;
+    if (guests.length) {   // semantic frame: back = from the guests' centroid to the host; semantics only orders left to right
+      let fx = host.tree.ux - guests.reduce((s, g) => s + g.tree.ux, 0) / guests.length;
+      let fz = host.tree.uz - guests.reduce((s, g) => s + g.tree.uz, 0) / guests.length;
+      const fl = Math.hypot(fx, fz);
+      if (fl > 1) { fx /= fl; fz /= fl; } else { fx = 0; fz = -1; }
+      guests.forEach(g => { g.s = (g.tree.ux - host.tree.ux) * -fz + (g.tree.uz - host.tree.uz) * fx; });
+    }
+    const nm = guests.length ? clamp(Math.round(LAY.MID_SHARE * guests.length), 1, LAY.MID_CAP) : 0;
+    const sumR = a => a.reduce((s, g) => s + g.Reff, 0);
+    // place members on the front arc of an ellipse around the host; returns those that did not fit in θmax
+    function ring(members, A, B, voidW, band, thmax) {
+      if (!members.length) return [];
+      const srt = members.slice().sort((a, b) => a.s - b.s || cmpStr(a.folder, b.folder));
+      let best = null;   // split left / right so that the footprints balance (semantic order is kept)
+      for (let k = 0; k <= srt.length; k++) {
+        if (srt.length > 1 && (k === 0 || k === srt.length)) continue;
+        const diff = Math.abs(sumR(srt.slice(0, k)) - sumR(srt.slice(k)));
+        if (!best || diff < best[0] - 1e-6 || (Math.abs(diff - best[0]) < 1e-6 && Math.abs(k - srt.length / 2) < Math.abs(best[1] - srt.length / 2))) best = [diff, k];
+      }
+      const k = best[1], heavyRight = sumR(srt.slice(k)) >= sumR(srt.slice(0, k)), over = [];
+      for (const [grp, sgn] of [[srt.slice(k), 1], [srt.slice(0, k).reverse(), -1]]) {
+        const Bs = B * ((sgn > 0) === heavyRight ? 1 - LAY.ASYM : 1 + LAY.ASYM);   // zigzag recession (之)
+        let th = null, prevR = 0;
+        for (const g of grp) {
+          th = th === null ? (voidW / 2 + g.Reff * LAY.KAPPA) / A : th + (LAY.KAPPA * (prevR + g.Reff) + LAY.GAP) / Math.hypot(A * Math.cos(th), Bs * Math.sin(th));
+          if (th > thmax * DEG) over.push(g);
+          const tt = Math.min(th, thmax * DEG);
+          g.x = sgn * A * Math.sin(tt); g.z = Bs * Math.cos(tt); g.band = band;
+          prevR = g.Reff;
+        }
+      }
+      return over;
+    }
+    function place(lam) {
+      host.x = host.z = 0; host.band = 0;
+      const rings = [guests.slice(0, nm), guests.slice(nm)];
+      let A0 = 0, B0 = 0, Rprev = 0;
+      for (let k = 0; k < rings.length; k++) {
+        if (!rings[k].length) continue;
+        const Rk = Math.max(...rings[k].map(g => g.Reff));
+        const [a, b, c, d] = LAY.MID_RING;
+        const A = k === 0 ? a * Rh + b * Rk : A0 + LAY.NEAR_RING[0] * (Rprev + Rk), B = k === 0 ? c * Rh + d * Rk : B0 + LAY.NEAR_RING[1] * (Rprev + Rk);
+        for (;;) {   // a ring that overflows its arc hands its smallest member to the next ring out
+          const over = ring(rings[k], A * lam, B / lam, LAY.VOID[Math.min(k, 1)] * Rh, k + 1, LAY.THETA_MAX[Math.min(k, 1)]);
+          if (!over.length || rings[k].length === 1) break;
+          const g = rings[k].reduce((p, q) => q.Reff < p.Reff || (q.Reff === p.Reff && cmpStr(q.folder, p.folder) < 0) ? q : p);
+          rings[k].splice(rings[k].indexOf(g), 1);
+          if (k + 1 === rings.length) rings.push([]);
+          rings[k + 1].unshift(g);
+        }
+        A0 = A; B0 = B; Rprev = Rk;
+      }
+      // the smaller of a pair moves more; the host never moves. First the feet (centres ≥ κ·(Ra + Rb)), then the peaks:
+      // two massifs' features keep their tops ≥ FEATURE_SEP·(wa + wb) apart, so no summit or shoulder of one massif
+      // climbs onto another's (one peak, two names)
+      relax((p, q) => LAY.KAPPA * (p.Reff + q.Reff) + (p.band === q.band ? LAY.GAP : 0) - Math.hypot(q.x - p.x, q.z - p.z), Infinity, 0);
+      relax((p, q) => {
+        let deficit = 0;
+        for (const a of p.feats) for (const b of q.feats)
+          deficit = Math.max(deficit, LAY.FEATURE_SEP * (a.w + b.w) - Math.hypot(q.x + b.lx - p.x - a.lx, q.z + b.lz - p.z - a.lz));
+        return deficit;
+      }, 4, 0.05);
+    }
+    // push pairs apart along their centre line while deficit(p, q) > 0 (at most maxStep per pass)
+    function relax(deficit, maxStep, tol) {
+      for (let it = 0; it < LAY.RELAX_PASSES; it++) {
+        let moved = false;
+        for (let i = 0; i < out.length; i++) for (let j = i + 1; j < out.length; j++) {
+          const p = out[i], q = out[j], d = deficit(p, q);
+          if (d <= tol) continue;
+          moved = true;
+          const dx = q.x - p.x, dz = q.z - p.z, dd = Math.hypot(dx, dz) || 1e-3, push = Math.min(d, maxStep);
+          const wa = i === 0 ? 0 : q.Reff ** 2 / (p.Reff ** 2 + q.Reff ** 2);
+          p.x -= dx / dd * push * wa; p.z -= dz / dd * push * wa;
+          q.x += dx / dd * push * (1 - wa); q.z += dz / dd * push * (1 - wa);
+        }
+        if (!moved) break;
+      }
+    }
+    function aspect() {   // width / height of the land as the default camera sees it (orthographic estimate)
+      const p = LAY.POLAR, az = LAY.AZ, rel = reliefFor(p);
+      const rx = Math.cos(az), rz = -Math.sin(az), ux = -Math.cos(p) * Math.sin(az), uy = Math.sin(p), uz = -Math.cos(p) * Math.cos(az);
+      let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
+      const add = (x, y, z) => { const X = x * rx + z * rz, Y = x * ux + y * uy + z * uz; x0 = Math.min(x0, X); x1 = Math.max(x1, X); y0 = Math.min(y0, Y); y1 = Math.max(y1, Y); };
+      for (const m of out) {
+        for (let k = 0; k < 12; k++) add(m.x + 0.9 * m.Reff * Math.cos(k * Math.PI / 6), 0, m.z + 0.9 * m.Reff * Math.sin(k * Math.PI / 6));
+        add(m.x, m.h * rel, m.z);
+      }
+      return (x1 - x0) / Math.max(y1 - y0, 1e-6);
+    }
+    // wider rings for a tall land, deeper ones for a wide land; a phone held upright at load composes for a tall frame
+    const target = PORTRAIT_BOOT ? LAY.PORTRAIT_ASPECT : LAY.ASPECT, range = PORTRAIT_BOOT ? LAY.PORTRAIT_LAMBDA : LAY.LAMBDA;
+    let lam = 1;
+    for (let it = 0; it < LAY.FIT_PASSES; it++) {
+      place(lam);
+      const a = aspect();
+      if (Math.abs(a - target) < LAY.ASPECT_TOL) break;
+      lam = clamp(lam * Math.pow(target / a, 0.7), ...range);
+    }
+    place(lam);
+    for (const m of out) for (const f of [...m.feats, ...m.spotFeats]) { f.x = m.x + f.lx; f.z = m.z + f.lz; }
+    return { massifs: out, lambda: lam, aspect: aspect() };
+  })();
+  const massifsAll = composition.massifs;
+
+  // ======================================================================
+  // Heightfield: one Float32Array feeds the mesh, dots, trails, labels and picking
+  // ======================================================================
+  let bx0 = Infinity, bx1 = -Infinity, bz0 = Infinity, bz1 = -Infinity;
+  massifsAll.forEach(m => {
+    const e = LAY.GRID_EXT * m.Reff;
+    bx0 = Math.min(bx0, m.x - e); bx1 = Math.max(bx1, m.x + e); bz0 = Math.min(bz0, m.z - e); bz1 = Math.max(bz1, m.z + e);
+  });
+  const W = Math.max(bx1 - bx0, bz1 - bz0, 20) + 2 * LAY.GRID_PAD;
+  const GX0 = (bx0 + bx1) / 2 - W / 2, GZ0 = (bz0 + bz1) / 2 - W / 2, CELL = W / (GRID - 1);
+  const G = GRID, G2 = G * G;
+  const cellOf = (x, z) => [clamp(Math.round((x - GX0) / CELL), 0, G - 1), clamp(Math.round((z - GZ0) / CELL), 0, G - 1)];
+  const cellIndex = (x, z) => { const [a, b] = cellOf(x, z); return b * G + a; };
+  const cellX = k => GX0 + (k % G) * CELL, cellZ = k => GZ0 + ((k / G) | 0) * CELL;
+  // every kernel is evaluated only inside the box where it can still matter (smax with ~0 leaves the land unchanged)
+  const EPS_H = 0.002;
+  const cellBox = (x0, x1, z0, z1) => [clamp(Math.floor((x0 - GX0) / CELL), 0, G - 1), clamp(Math.ceil((x1 - GX0) / CELL), 0, G - 1),
+    clamp(Math.floor((z0 - GZ0) / CELL), 0, G - 1), clamp(Math.ceil((z1 - GZ0) / CELL), 0, G - 1)];
+  const LOBE_MIN = 1 - 0.7 * LAY.LOBE;   // the narrowest a lobed cross-section gets
+  massifsAll.forEach(m => {
+    const bodyR = LAY.BODY_SIGMA * m.R * Math.sqrt(Math.max(Math.log(LAY.BODY_SHARE * m.h / EPS_H), 0));
+    let x0 = m.x - bodyR, x1 = m.x + bodyR, z0 = m.z - bodyR, z1 = m.z + bodyR;
+    for (const f of m.feats) {
+      const r = kernelInv(EPS_H, f.h, f.w, f.e, LAY.KERNEL_CAP) * (f.kind === "shoulder" ? LAY.SHOULDER_LONG : 1 / LOBE_MIN);
+      let a0 = f.x - r, a1 = f.x + r, c0 = f.z - r, c1 = f.z + r;
+      if (f.parent) {
+        const rl = LAY.RIDGE_W * f.w * Math.sqrt(Math.max(Math.log(f.s / EPS_H), 0));
+        a0 = Math.min(a0, f.parent.x - rl, f.x - rl); a1 = Math.max(a1, f.parent.x + rl, f.x + rl);
+        c0 = Math.min(c0, f.parent.z - rl, f.z - rl); c1 = Math.max(c1, f.parent.z + rl, f.z + rl);
+      }
+      f.box = cellBox(a0, a1, c0, c1);
+      x0 = Math.min(x0, a0); x1 = Math.max(x1, a1); z0 = Math.min(z0, c0); z1 = Math.max(z1, c1);
+    }
+    m.box = cellBox(x0, x1, z0, z1);
+  });
+  const FULL_BOX = [0, G - 1, 0, G - 1];
+  const SHORE_BLUR = 4, REVEAL_BLUR = 2;   // cells
+  const REVEAL_TILT = 0.08, REVEAL_BAND_STEP = 0.02, REVEAL_BODY_LEAD = 0.05;
+  // separable box blur of a (in place) over the cells of box, two passes of radius r; tmp is scratch
+  function boxBlur(a, tmp, box, r) {
+    const [x0, x1, z0, z1] = box;
+    for (let pass = 0; pass < 2; pass++) {
+      const src = pass ? tmp : a, dst = pass ? a : tmp;
+      for (let z = z0; z <= z1; z++) for (let x = x0; x <= x1; x++) {
+        let s = 0, c = 0;
+        for (let d = -r; d <= r; d++) {
+          const xx = pass ? x : x + d, zz = pass ? z + d : z;
+          if (xx < x0 || xx > x1 || zz < z0 || zz > z1) continue;
+          s += src[zz * G + xx]; c++;
+        }
+        dst[z * G + x] = s / c;
+      }
+    }
+  }
+  const eachIn = (box, fn) => { for (let gz = box[2]; gz <= box[3]; gz++) for (let gx = box[0]; gx <= box[1]; gx++) fn(gz * G + gx, GX0 + gx * CELL, GZ0 + gz * CELL); };
+
+  const RIDGED_NORM = 0.65 + 0.325 + 0.1625;   // sum of the three octave amplitudes
+  // the 8-neighbour hill climb to the local maximum
+  function climb(H, c) {
+    for (;;) {
+      const x = c % G, z = (c / G) | 0;
+      let best = c;
+      for (let b = -1; b <= 1; b++) for (let a = -1; a <= 1; a++) {
+        const xx = x + a, zz = z + b;
+        if (xx >= 0 && zz >= 0 && xx < G && zz < G && H[zz * G + xx] > H[best]) best = zz * G + xx;
+      }
+      if (best === c) return c;
+      c = best;
+    }
+  }
+  // the highest level t at which cells a and b are connected in {H ≥ t}: flood from a in decreasing height (4-connected)
+  function saddleBetween(H, a, b) {
+    if (a === b) return H[a];
+    const seen = new Uint8Array(G2), heap = new MinHeap();
+    heap.push(-H[a], a); seen[a] = 1;
+    let level = H[a];
+    while (heap.size) {
+      const c = heap.pop();
+      level = Math.min(level, H[c]);
+      if (c === b) return level;
+      const x = c % G, z = (c / G) | 0;
+      for (const [q, ok] of [[c - 1, x > 0], [c + 1, x < G - 1], [c - G, z > 0], [c + G, z < G - 1]]) if (ok && !seen[q]) { seen[q] = 1; heap.push(-H[q], q); }
+    }
+    return 0;
+  }
+
+  function buildLand(visibleFolder) {
+    const live = massifsAll.filter(m => visibleFolder(m.folder));
+    const H = new Float32Array(G2), ownerPlan = new Int16Array(G2).fill(-1), ownerFeat = new Int32Array(G2).fill(-1);
+    // strata: per cell the sector weight and two continuous coordinates (band index + τ, year index + τ) measured on the
+    // untouched slope, so the shader can ink the lip of every ledge at its exact height, whatever the grid spacing
+    const bandOf = new Int16Array(G2).fill(-1), strata = new Float32Array(G2 * 3);
+    const Hm = new Float32Array(G2), Hpre = new Float32Array(G2), Hct = new Float32Array(G2), Dt = new Float32Array(G2), Dtmp = new Float32Array(G2), own = new Int32Array(G2), bandM = new Int16Array(G2), strM = new Float32Array(G2 * 3), K = LAY.SMAX_K * LAY.H_HOST;
+    for (const m of live) {
+      eachIn(m.box, (k, x, z) => { Hm[k] = bodyEval(m, x, z); own[k] = -1; bandM[k] = -1; strM[k * 3] = strM[k * 3 + 1] = strM[k * 3 + 2] = 0; });
+      for (const f of m.feats) eachIn(f.box, (k, x, z) => { const v = featEval(f, x, z); if (v > Hm[k]) own[k] = f.id; Hm[k] = smax(Hm[k], v, K); });
+      // clefts: ridged angular noise around the nearest feature, masked off within 0.9 w of every top (never cut a name),
+      // and softened on the strata faces so the ledges stay level
+      eachIn(m.box, (k, x, z) => {
+        Hpre[k] = Hm[k];
+        const vn = Hm[k] / m.h;
+        if (vn <= 0.12) return;
+        let dmin = Infinity, ang = 0, nw = 1;
+        for (const f of m.feats) { const d = Math.hypot(x - f.x, z - f.z); if (d < dmin) { dmin = d; ang = Math.atan2(z - f.z, x - f.x); nw = f.w; } }
+        const mask = clamp((dmin / nw - LAY.CLEFT_MASK[0]) / (LAY.CLEFT_MASK[1] - LAY.CLEFT_MASK[0]), 0, 1) * clamp(2.4 * (vn - 0.12), 0, 1);
+        if (mask <= 0) return;
+        let R = 0, amp = 0.65, fr = 2.3;
+        for (let o = 0; o < 3; o++) {
+          const n = vnoise(Math.cos(ang) * fr + dmin * 0.035 + o * 11 + m.id * 3.1, Math.sin(ang) * fr + o * 5.3);
+          R += amp * (1 - Math.abs(2 * n - 1)); amp *= 0.5; fr *= 2.1;
+        }
+        let soft = 1;
+        for (const [f] of m.terr) if (Math.hypot(x - f.x, z - f.z) < terraceReach(f)) soft = Math.min(soft, 1 - (1 - STRATA_CLEFT) * terraceSector(f, x, z));
+        Hm[k] *= 1 - LAY.CLEFT * soft * mask * (1 - Math.pow(R / RIDGED_NORM, 1.4));
+      });
+      // strata on the camera-facing sector of their feature; g is monotone in H, so they can't create, remove or swap peaks
+      if (m.terr.length) eachIn(m.box, k => { Hct[k] = Hm[k]; });
+      for (const [f] of m.terr) {
+        const reach = terraceReach(f), bands = f.bands, nb = bands.length, A = bands[0].a, Bt = bands[nb - 1].b;
+        const pad = 0.5 * (bands[0].b - bands[0].a);
+        eachIn(m.box, (k, x, z) => {
+          const h = Hm[k];
+          if (Hpre[k] < A - pad || Hpre[k] >= Bt + pad || !(own[k] === f.id || (own[k] === -1 && f.kind === "crown"))) return;
+          if (Math.hypot(x - f.x, z - f.z) >= reach) return;
+          const sector = terraceSector(f, x, z);
+          if (sector <= 0) return;
+          // the lines are measured on the slope before the clefts, so each ledge reads as one level stroke
+          const hp = Hpre[k];
+          let i = 0;
+          while (i < nb - 1 && hp >= bands[i].b) i++;
+          const P = bands[i];
+          strM[k * 3] = sector * (1 - smoothstep(Math.max(A - hp, hp - Bt), 0, pad));
+          strM[k * 3 + 1] = i + (hp - P.a) / (P.b - P.a);
+          strM[k * 3 + 2] = P.yi + (hp - P.ya) / (P.yb - P.ya);
+          if (h < A || h >= Bt) return;
+          let j = 0;
+          while (j < nb - 1 && h >= bands[j].b) j++;
+          const B = bands[j], t = (h - B.a) / (B.b - B.a);
+          Hm[k] = h + (B.a + (B.b - B.a) * stair(t, B.strong) - h) * LAY.TERRACE_MIX * sector;
+          if (sector > 0.3) bandM[k] = B.id;
+        });
+      }
+      // the steps are narrower than a cell: blur the strata's deformation (not the slope) over 2 cells so the grid
+      // resolves each bench instead of aliasing it into a staircase; the exact ledge lines are inked by the shader
+      if (m.terr.length) {
+        eachIn(m.box, k => { Dt[k] = Hm[k] - Hct[k]; });
+        boxBlur(Dt, Dtmp, m.box, TERRACE_BLUR);
+        eachIn(m.box, k => { Hm[k] = Hct[k] + Dt[k]; });
+      }
+      eachIn(m.box, k => {
+        if (Hm[k] > H[k]) { ownerPlan[k] = m.id; ownerFeat[k] = own[k]; bandOf[k] = bandM[k]; strata.set(strM.subarray(k * 3, k * 3 + 3), k * 3); }
+        H[k] = smax(H[k], Hm[k], K);
+      });
+    }
+    // the sea cut: every shore is crisp
+    const sea = LAY.SEA * LAY.H_HOST, rescale = LAY.H_HOST / (LAY.H_HOST - sea);
+    for (let k = 0; k < G2; k++) { H[k] = Math.max(H[k] - sea, 0) * rescale; if (H[k] <= 0) { ownerPlan[k] = -1; strata[k * 3] = 0; } }
+    // massifs, in the order the rest of the code indexes them; feature tops and saddles measured on this land
+    const liveIndex = new Int16Array(massifsAll.length).fill(-1), topOf = new Map();
+    const massifs = live.map((p, id) => {
+      liveIndex[p.id] = id;
+      return { id, plan: p, folder: p.folder, cells: [], notes: p.tree.notes.slice(), birth: quantileU(p.tree.notes, 0.25), tops: [], summit: null };
+    });
+    for (let k = 0; k < G2; k++) if (H[k] > LAND_MIN && ownerPlan[k] >= 0) massifs[liveIndex[ownerPlan[k]]].cells.push(k);
+    for (const M of massifs) {
+      for (const f of M.plan.feats) { const c = climb(H, cellIndex(f.x, f.z)); topOf.set(f, { x: cellX(c), z: cellZ(c), h: H[c], cell: c, feat: f, sad: 0 }); }
+      for (const f of M.plan.feats) if (f.parent) { const t = topOf.get(f); t.sad = saddleBetween(H, t.cell, topOf.get(f.parent).cell); }
+      M.tops = M.plan.feats.map(f => topOf.get(f));
+      M.summit = M.tops[0];
+    }
+    const massifAt = k => ownerPlan[k] >= 0 ? liveIndex[ownerPlan[k]] : -1;
+    // D: a blurred land mask; the shore band (0 < D < .5 in the water) is where the ripples go
+    const D = new Float32Array(G2);
+    for (let k = 0; k < G2; k++) D[k] = H[k] > LAND_MIN ? 1 : 0;
+    boxBlur(D, new Float32Array(G2), FULL_BOX, SHORE_BLUR);
+    const GXa = new Float32Array(G2), GZa = new Float32Array(G2);   // gradient per world unit
+    for (let z = 0; z < G; z++) for (let x = 0; x < G; x++) {
+      const k = z * G + x;
+      GXa[k] = (H[z * G + Math.min(x + 1, G - 1)] - H[z * G + Math.max(x - 1, 0)]) / (2 * CELL);
+      GZa[k] = (H[Math.min(z + 1, G - 1) * G + x] - H[Math.max(z - 1, 0) * G + x]) / (2 * CELL);
+    }
+    return { H, D, massifs, massifAt, ownerPlan, ownerFeat, bandOf, strata, topOf, GXa, GZa, cost: null };
+  }
+
+  // the same bilinear height the GPU sees
+  function sampleH(H, x, z) {
+    const fx = clamp((x - GX0) / CELL, 0, G - 1.001), fz = clamp((z - GZ0) / CELL, 0, G - 1.001);
+    const ix = Math.floor(fx), iz = Math.floor(fz), ax = fx - ix, az = fz - iz, k = iz * G + ix;
+    return (H[k] * (1 - ax) + H[k + 1] * ax) * (1 - az) + (H[k + G] * (1 - ax) + H[k + G + 1] * ax) * az;
+  }
+
+  const world = { land: buildLand(() => true), prev: null, blend: null, massifOfNote: new Int32Array(N).fill(-1), trailCount: 0 };
+  world.prev = world.land;
+  let HMAX = 1e-6; for (const v of world.land.H) HMAX = Math.max(HMAX, v);
+  const H_WATER = 0.04 * HMAX;
+
+  // ======================================================================
+  // Notes on their features: the most linked near the top
+  // ======================================================================
+  // Summit and shoulder notes stay within ±110° of the outward direction (never in the saddle facing the parent), crown
+  // notes ±150° around the front, spot notes on a small disc, and dated notes on their stratum's tread facing the camera.
+  // the radius along phi from feature f at which the ground has fallen to lvl
+  function surfaceAt(H, f, phi, lvl, rmax) {
+    const c = Math.cos(phi), s = Math.sin(phi);
+    for (let i = 0; i < 220; i++) { const r = 0.2 + (rmax - 0.2) * i / 219; if (sampleH(H, f.x + r * c, f.z + r * s) <= lvl) return r; }
+    return rmax;
+  }
+  for (const m of massifsAll) walk(m.tree, fold => {
+    const ids = fold.direct.slice().sort((a, b) => deg[b] - deg[a] || a - b);
+    if (!ids.length) return;
+    let home = fold;
+    while (!home.feat && !home.band) home = home.parent;
+    const last = Math.max(1, ids.length - 1);
+    if (home.band && !home.feat) {
+      const { f, a, b } = home.band, span = (LAY.TERRACE_SECTOR - 15) * DEG;
+      ids.forEach((i, r) => {
+        const n = nodes[i];
+        // spread over ±60° of the front, with a hash jitter across the tread (rows are too regular without it)
+        const phi = 90 * DEG + (ids.length > 1 ? (r / last - 0.5) * 2 * span : 0) + (hash2(i, 3.3) - 0.5) * 0.1;
+        const lvl = a + (0.3 + 0.5 * (hash2(i, 8.1) - 0.5)) * (b - a), rr = surfaceAt(world.land.H, f, phi, lvl, 3 * f.w + 12);
+        n.x = f.x + rr * Math.cos(phi); n.z = f.z + rr * Math.sin(phi); n.feat = f; n.onBand = true;
+      });
+      return;
+    }
+    const f = home.feat;
+    ids.forEach((i, r) => {
+      const n = nodes[i];
+      let phi, rad;
+      if (f.kind === "spot") { phi = hash2(i, 2.7) * 2 * Math.PI; rad = f.w * (0.2 + 0.8 * Math.sqrt(r / last)); }
+      else {
+        const out = f.kind === "crown" ? Math.PI / 2 : Math.atan2(f.z - f.parent.z, f.x - f.parent.x);
+        phi = out + (hash2(i, 5.1) - 0.5) * 2 * (f.kind === "crown" ? 150 : 110) * DEG;
+        rad = f.w * (0.1 + 0.8 * Math.sqrt(r / last));
+      }
+      n.x = f.x + rad * Math.cos(phi); n.z = f.z + rad * Math.sin(phi); n.feat = f; n.onBand = false;
+    });
+  });
+
+  // ======================================================================
+  // Reveal order: when each cell is drawn during the painting
+  // ======================================================================
+  // The painter draws the host first, then the middle distance, then the near hills, and within each the folders in
+  // the order they were written: u_f = 0.5·distance + 0.5·(when the folder had 30% of its notes). Shoulders and spots
+  // come after their parent, the body just before its crown, and each stratum when its first note was written, so the
+  // diary is deposited oldest at the bottom. Then the times are equalised over the land and blurred by 2 cells.
+  const REVEAL = (() => {
+    const L = world.land, out = new Float32Array(G2).fill(1), land = [], uOf = new Map(), DIST_U = [0, 0.33, 0.66];
+    for (const m of massifsAll) for (const f of [...m.feats, ...m.spotFeats]) {
+      let u = 0.5 * DIST_U[Math.min(m.band, 2)] + 0.5 * quantileU(f.folder.notes, 0.3);
+      if (f.kind === "shoulder" || f.kind === "spot") u = Math.max(u, uOf.get(f.parent) + 0.03);
+      uOf.set(f, u);
+    }
+    // a stratum is inked when its first note was written, and never before the one beneath it
+    const bandU = allBands.map(B => Math.max(uOf.get(B.f), B.firstU));
+    allBands.forEach((B, i) => { if (B.j) bandU[i] = Math.max(bandU[i], bandU[i - 1] + REVEAL_BAND_STEP); });
+    for (let k = 0; k < G2; k++) {
+      if (L.H[k] <= LAND_MIN * 0.5 || L.ownerPlan[k] < 0) continue;
+      const m = massifsAll[L.ownerPlan[k]], fe = L.ownerFeat[k], b = L.bandOf[k];
+      let u = fe >= 0 ? uOf.get(featById[fe]) : uOf.get(m.feats[0]) - REVEAL_BODY_LEAD;
+      if (b >= 0) u = bandU[b];
+      out[k] = u + REVEAL_TILT * L.H[k] / HMAX;   // within a feature, the foot a little before the top
+      land.push(k);
+    }
+    land.sort((a, b) => out[a] - out[b]).forEach((k, r) => { out[k] = land.length > 1 ? r / (land.length - 1) : 0; });
+    // strata keep their exact order (the blur would mix the top ledge with the crown above it, inked earlier)
+    const strataU = land.filter(k => L.bandOf[k] >= 0).map(k => [k, out[k]]);
+    boxBlur(out, new Float32Array(G2), FULL_BOX, REVEAL_BLUR);
+    for (const [k, u] of strataU) out[k] = u;
+    return out;
+  })();
+
+  // an RGBA half-float texture over the grid; texel(k) returns its four channels
+  function gridTexture(texel) {
+    const d = new Uint16Array(G2 * 4), h = THREE.DataUtils.toHalfFloat;
+    for (let k = 0; k < G2; k++) { const v = texel(k); for (let c = 0; c < 4; c++) d[k * 4 + c] = h(v[c]); }
+    const t = new THREE.DataTexture(d, G, G, THREE.RGBAFormat, THREE.HalfFloatType);
+    t.minFilter = t.magFilter = THREE.LinearFilter; t.wrapS = t.wrapT = THREE.ClampToEdgeWrapping; t.needsUpdate = true;
+    return t;
+  }
+  // r height, g/b gradient, a reveal time
+  const landTexture = L => gridTexture(k => [L.H[k], L.GXa[k], L.GZa[k], REVEAL[k]]);
+  // strata: r sector weight, g band coordinate, b year coordinate; inked in the outline stage as dry horizontal strokes
+  const strataTexture = L => gridTexture(k => [L.strata[k * 3], L.strata[k * 3 + 1], L.strata[k * 3 + 2], 0]);
+
+  // blended while a folder toggle reshapes the land
+  const hAt = (x, z) => {
+    const b = U.uBlend.value;
+    return b <= 0 ? sampleH(world.prev.H, x, z) : lerp(sampleH(world.prev.H, x, z), sampleH(world.land.H, x, z), b);
+  };
+
+  // ======================================================================
+  // Renderer and the brush-noise atlas (rendered once)
+  // ======================================================================
+  const renderer = new THREE.WebGLRenderer({ antialias: true });
+  const DPR = Math.min(devicePixelRatio, 1.5);
+  renderer.setPixelRatio(DPR);
+  renderer.setSize(innerWidth, innerHeight);
+  renderer.setClearColor(0xece7db, 1);
+  document.body.prepend(renderer.domElement);
+  const scene = new THREE.Scene();
+  const camera = new THREE.PerspectiveCamera(FOV, innerWidth / innerHeight, 10, 4000);
+
+  // R: iso fbm. G: hemp fibre, stretched 1:8. B: paper fibres, long and horizontal. A: blotches.
+  const atlasRT = new THREE.WebGLRenderTarget(512, 512, { generateMipmaps: true, minFilter: THREE.LinearMipmapLinearFilter, magFilter: THREE.LinearFilter, wrapS: THREE.RepeatWrapping, wrapT: THREE.RepeatWrapping, depthBuffer: false });
+  {
+    const quad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), new THREE.ShaderMaterial({
+      vertexShader: `varying vec2 vUv; void main(){ vUv = uv; gl_Position = vec4(position.xy, 0., 1.); }`,
+      fragmentShader: `varying vec2 vUv;
+        float h(vec2 i, vec2 per){ i = mod(i, per); return fract(sin(dot(i, vec2(127.1, 311.7))) * 43758.5453); }
+        float vn(vec2 p, vec2 per){ vec2 i = floor(p), f = fract(p); f = f*f*(3.-2.*f);
+          return mix(mix(h(i, per), h(i+vec2(1,0), per), f.x), mix(h(i+vec2(0,1), per), h(i+vec2(1,1), per), f.x), f.y); }
+        float fbm(vec2 uv, vec2 fr, int oct){
+          float s = 0., a = .5, t = 0.;
+          for (int i = 0; i < 6; i++){ if (i >= oct) break; s += a * vn(uv * fr, fr); t += a; fr *= 2.; a *= .5; }
+          return s / t;
+        }
+        void main(){
+          gl_FragColor = vec4(fbm(vUv + .37, vec2(8.), 5), fbm(vUv, vec2(56., 7.), 3), fbm(vUv + .11, vec2(5., 44.), 4), fbm(vUv + .71, vec2(3.), 4));
+        }`,
+    }));
+    const s = new THREE.Scene(); s.add(quad);
+    renderer.setRenderTarget(atlasRT); renderer.render(s, new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1)); renderer.setRenderTarget(null);
+    quad.geometry.dispose(); quad.material.dispose();
+  }
+
+  // ======================================================================
+  // Shared uniforms and GLSL
+  // ======================================================================
+  const U = {
+    uLandA: { value: landTexture(world.land) }, uLandB: { value: null }, uBlend: { value: 0 },
+    uAtlas: { value: atlasRT.texture },
+    uStrataA: { value: strataTexture(world.land) }, uStrataB: { value: null },
+    uRelief: { value: 1 }, uHmax: { value: HMAX }, uHWater: { value: H_WATER }, uHMist: { value: H_MIST }, uMistW: { value: 1.2 * LAY.MIST[1] * LAY.H_HOST },
+    uMistBands: { value: new THREE.Vector2(0.35, 0.7) },
+    uGrid0: { value: new THREE.Vector2(GX0, GZ0) }, uGridW: { value: W }, uGridN: { value: G },
+    uDNear: { value: 100 }, uDFar: { value: 600 }, uTime: { value: 0 }, uMist: { value: 1 },
+    uDraw: { value: FINISHED_DRAW }, uWashP: { value: 1 }, uPaths: { value: 1 }, uPolar: { value: 0.9 },
+    uFolderMask: { value: null }, uFolderInk: { value: new THREE.Color() }, uFolderOn: { value: 0 },
+    uSummits: { value: Array.from({ length: CUN_CENTRES }, () => new THREE.Vector2()) }, uSummitCount: { value: 0 },
+    uDpr: { value: DPR }, uViewport: { value: new THREE.Vector2(innerWidth * DPR, innerHeight * DPR) },
+  };
+  U.uLandB.value = U.uLandA.value; U.uStrataB.value = U.uStrataA.value;
+
+  const GLSL_COMMON = `
+    uniform sampler2D uLandA, uLandB, uAtlas;
+    uniform float uBlend, uRelief, uHmax, uHWater, uHMist, uMistW, uGridW, uGridN, uDNear, uDFar, uTime, uMist, uDraw, uWashP, uPolar, uDpr;
+    uniform vec2 uGrid0, uViewport, uMistBands;
+    vec2 landUv(vec2 xz){ return ((xz - uGrid0) / uGridW * (uGridN - 1.) + .5) / uGridN; }
+    vec4 landT(vec2 uv){ return mix(texture2D(uLandA, uv), texture2D(uLandB, uv), uBlend); }   // r height, gb gradient, a reveal
+    vec4 land(vec2 xz){ return landT(landUv(xz)); }
+    const vec3 WASHI = vec3(.925, .906, .859);
+    const vec3 SUMI = vec3(.094, .094, .11);
+    vec3 paper(vec2 fc){
+      vec2 p = fc / uDpr;
+      float f = texture2D(uAtlas, p / vec2(300., 260.)).b * .6 + texture2D(uAtlas, p / vec2(190., 170.) + .5).b * .4;
+      float bl = texture2D(uAtlas, p / 1100. + .3).a;
+      return WASHI * (1. - .02 * smoothstep(.52, .8, f) - .035 * (bl - .5));
+    }
+    float gband(float x, float c, float w){ float d = (x - c) / w; return exp(-d * d); }
+    // mist is reserved paper: a valley band at hMist (above every saddle between massifs) plus two view-depth bands
+    // in the gaps between the three distances (host, middle ring, near ring)
+    float mistAt(vec2 xz, float h, float depth){
+      float n1 = texture2D(uAtlas, xz * .011 + vec2(uTime * .003, 0.)).r;
+      float valley = gband(h, uHMist, uMistW) * smoothstep(.35, .62, n1);
+      float dn = (depth - uDNear) / max(uDFar - uDNear, 1.);
+      float n2 = texture2D(uAtlas, xz * .017 + vec2(.5, uTime * .002)).a;
+      float lowness = 1. - smoothstep(.2, .85, h / uHmax);
+      float bands = (gband(dn, uMistBands.x, .07) + gband(dn, uMistBands.y, .07)) * .85 * smoothstep(.25, .55, n2 + .1) * lowness;
+      vec2 e = min(xz - uGrid0, uGrid0 + uGridW - xz);
+      float edge = smoothstep(0., 15., min(e.x, e.y));            // no mist band ever touches the mesh edge
+      return clamp((valley * .85 + bands) * uMist, 0., 1.) * edge;
+    }`;
+  const VNOISE = `
+    float h1(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+    float vn(vec2 p){ vec2 i = floor(p), f = fract(p); f = f*f*(3.-2.*f);
+      return mix(mix(h1(i), h1(i+vec2(1,0)), f.x), mix(h1(i+vec2(0,1)), h1(i+vec2(1,1)), f.x), f.y); }`;
+
+  // ======================================================================
+  // Terrain: ink from form, not from light
+  // ======================================================================
+  const terrainGeo = new THREE.PlaneGeometry(W, W, G - 1, G - 1);
+  terrainGeo.rotateX(-Math.PI / 2);
+  terrainGeo.translate(GX0 + W / 2, 0, GZ0 + W / 2);
+  const terrain = new THREE.Mesh(terrainGeo, new THREE.ShaderMaterial({
+    uniforms: U,
+    vertexShader: `${GLSL_COMMON}
+      varying vec3 vW; varying float vDepth;
+      void main(){
+        vec3 p = vec3(position.x, land(position.xz).r * uRelief, position.z);
+        vW = p;
+        vec4 mv = modelViewMatrix * vec4(p, 1.);
+        vDepth = -mv.z;
+        gl_Position = projectionMatrix * mv;
+      }`,
+    fragmentShader: `${GLSL_COMMON}
+      varying vec3 vW; varying float vDepth;
+      uniform sampler2D uFolderMask, uStrataA, uStrataB; uniform vec3 uFolderInk; uniform float uFolderOn;
+      ${VNOISE}
+      const float CUN_SPACING = 1.1;   // world units between neighbouring hemp-fibre strokes
+      // one set of strokes: columns across the slope, broken into dashes of 3 to 7 units of height
+      float strokeSet(float across, float along){
+        float u = across / CUN_SPACING, col = floor(u);
+        float r1 = h1(vec2(col, 3.1)), r2 = h1(vec2(col, 7.7));
+        float a = along / (3. + 4. * r1) + r2 * 10.;
+        float on = step(.5, h1(vec2(col, floor(a))));                    // about half the dashes carry ink
+        float pressure = smoothstep(0., .15, fract(a)) * smoothstep(1., .55, fract(a));   // loaded, then lifting
+        float wob = .18 * sin(along * .6 + r1 * 6.2832);                  // a hand-drawn waver
+        float fw = max(fwidth(across), 1e-4);
+        float px = abs(fract(u) - .5 - wob) * CUN_SPACING / fw;          // distance to the stroke centre, in pixels
+        float fade = 1. - smoothstep(.15, .45, fw / CUN_SPACING);         // strokes closer than ~3 px fade out
+        return on * pressure * fade * (1. - smoothstep(.35 + .5 * pressure, 1.1 + .5 * pressure, px));
+      }
+      // cun: hemp-fibre strokes radiate down from the nearest summit, so on a peak they follow the fall line.
+      // Fixed in the world (they do not swim while orbiting); they thin out towards the crest where they converge.
+      uniform vec2 uSummits[${CUN_CENTRES}];
+      uniform int uSummitCount;
+      vec2 nearestSummit(vec2 xz){
+        vec2 c = uSummits[0]; float best = 1e9;
+        for (int i = 0; i < ${CUN_CENTRES}; i++) {
+          if (i >= uSummitCount) break;
+          float d = distance(xz, uSummits[i]);
+          if (d < best) { best = d; c = uSummits[i]; }
+        }
+        return c;
+      }
+      float cunStrokes(vec2 r, float h){ return strokeSet(atan(r.y, r.x) * 12., h); }   // 12 units of arc per radian: about 70 columns around a peak
+      // strata: the lip of every ledge of a dated folder, a dry stroke along the level (years firm, months faint),
+      // broken where the bristles run dry. Drawn at the exact height whatever the grid spacing (fwidth of the coordinate).
+      float lipLine(float c, float px){ float d = abs(fract(c + .5) - .5) / max(fwidth(c), 1e-4); return 1. - smoothstep(px, px + 1., d); }
+      float strataStrokes(vec4 S, vec2 r, float h){
+        if (S.r < .02) return 0.;
+        float along = atan(r.y, r.x) * length(r);                        // arc length around the feature
+        float dry = vn(vec2(along * .22, h * .9)) * .65 + vn(vec2(along * 1.1, h * 3.)) * .35;
+        float line = max(lipLine(S.b, .8 * uDpr), .45 * lipLine(S.g, .35 * uDpr));
+        return smoothstep(.1, .6, S.r) * line * smoothstep(.3, .52, dry);
+      }
+      void main(){
+        vec2 xz = vW.xz, uv = landUv(xz);
+        float e = 2.5 / uGridN, cw = uGridW / (uGridN - 1.) * 2.5;   // 2.5 cells: gully scale
+        float eW = 5. / uGridW;                                       // 5 world units: mountain scale
+        vec4 C = landT(uv);
+        vec4 S = mix(texture2D(uStrataA, uv), texture2D(uStrataB, uv), uBlend);   // strata: sector, band and year coordinates
+        float hL = landT(uv - vec2(e, 0.)).r, hR = landT(uv + vec2(e, 0.)).r, hD = landT(uv - vec2(0., e)).r, hU = landT(uv + vec2(0., e)).r;
+        float wL = landT(uv - vec2(eW, 0.)).r, wR = landT(uv + vec2(eW, 0.)).r, wD = landT(uv - vec2(0., eW)).r, wU = landT(uv + vec2(0., eW)).r;
+        float H = C.r, hn = clamp(H / uHmax, 0., 1.);
+        float lap = (hL + hR + hD + hU - 4. * H) / (cw * cw);
+        float lapW = (wL + wR + wD + wU - 4. * H) / 25.;
+        vec3 N = normalize(vec3(-uRelief * C.g, 1., -uRelief * C.b));
+        vec3 NW = normalize(vec3(-uRelief * (wR - wL) / 10., 1., -uRelief * (wU - wD) / 10.));
+        vec3 V = normalize(cameraPosition - vW);
+        vec3 nvW = normalize((viewMatrix * vec4(NW, 0.)).xyz);
+        float n = texture2D(uAtlas, xz * .05).r, nf = texture2D(uAtlas, xz * .21 + .4).r;
+        float slope = 1. - N.y;
+
+        // gou: N·V contour at a constant pixel width, heavier low on the mountain, broken near the crests
+        float ndv = dot(N, V);
+        float w = mix(3.6, 1.1, pow(hn, .6)) * (.75 + .5 * nf) * uDpr;
+        float gou = 1. - smoothstep(.5, 1., max(ndv, 0.) / (w * max(fwidth(ndv), .02)));
+        gou *= 1. - step(nf, .25 * smoothstep(.45, .8, hn));
+        // from above the contour vanishes, so it crossfades into three iso-height lines
+        float fromAbove = 1. - smoothstep(10. * ${DEG}, 22. * ${DEG}, uPolar);
+        float iso = 0.;
+        for (int i = 0; i < 3; i++) {
+          float level = .1 + .25 * float(i);
+          float px = abs(hn - level + .015 * (n - .5)) / max(fwidth(hn), 1e-5);   // distance to the contour, in pixels
+          float weight = i == 0 ? 1. : .7;                                        // the shoreline is darkest
+          iso = max(iso, (1. - smoothstep(.6, 1.5, px)) * weight);
+        }
+        gou = mix(gou, iso, fromAbove);
+
+        float concW = clamp(lapW * 2.2, 0., 1.) * (1. - .6 * S.r);   // the stepped strata take lines, not concavity washes
+        // a fixed convention, not a light: the left flank carries a little more ink (capped so flanks don't stripe)
+        float side = .2 * smoothstep(.1, -.6, nvW.x);
+
+        // ran: washes from form, with wet edges that bleed along the paper fibres instead of cutting
+        float mid = smoothstep(.08, .3, hn) * (1. - smoothstep(.55, .9, hn));
+        float blot = texture2D(uAtlas, xz * .018 + .2).a;
+        float fibre = texture2D(uAtlas, xz * .09).b;
+        float bleed = (fibre - .5) * .16 + (blot - .5) * .1;
+        float ran = .1 + .4 * concW + side + .18 * mid + .05 * (n - .5);
+        float wash = .13 * smoothstep(.10, .26, ran + bleed) + .13 * smoothstep(.27, .45, ran + 1.3 * bleed);
+        // clefts between spurs take a graded tone that bleeds along the fibres, never a filled slab
+        float groove = smoothstep(.25, 1.6, lap * 1.6 + 2. * bleed) * smoothstep(.06, .2, hn) * (1. - .85 * S.r);
+        wash += .16 * groove;
+
+        float far = smoothstep(.12, .95, (vDepth - uDNear) / max(uDFar - uDNear, 1.));
+        float atm = mix(1., .3, far);
+        float foot = smoothstep(uHWater, uHWater + 4.5, H + 3. * (n - .5));
+        float mist = mistAt(xz, H, vDepth);
+
+        // the painting order: outline and texture follow creation order; the wash bleeds down from the crests
+        float drawn = smoothstep(0., .035, uDraw - C.a + .05 * (n - .5));
+        float front = drawn * (1. - smoothstep(0., .05, uDraw - C.a)) * step(uDraw, 1.2);
+        float washed = smoothstep(0., .12, uWashP * 1.25 - (1. - hn) + .1 * (n - .5));
+
+        // cun: fine hemp-fibre strokes in groups, on the steeper flanks, sitting on paper rather than on the wash
+        float cluster = mix(.35, 1., smoothstep(.3, .6, texture2D(uAtlas, xz * .021 + .63).a));   // denser in groups
+        vec2 rc = xz - nearestSummit(xz);
+        float cun = cunStrokes(rc, H) * smoothstep(.15, .4, slope) * pow(1. - hn, .4) * (.6 + 2. * side) * cluster;
+        cun *= 1. - .9 * wash * washed;
+        float strata = strataStrokes(S, rc, H) * (1. - fromAbove);
+
+        float detail = 1. - .75 * far;               // far ranges keep the silhouette and lose the texture
+        float lines = 1. - (1. - gou * .97) * (1. - cun * .85 * detail) * (1. - strata * .7 * (.5 + .5 * detail));
+        float v = 1. - (1. - lines * drawn) * (1. - wash * washed * drawn) * (1. - .2 * front);
+        v *= atm * foot * (1. - mist);
+        vec3 col = mix(paper(gl_FragCoord.xy), SUMI, v);
+        // hovering a folder in the legend lays a wash of its ink over the land it covers
+        float fm = texture2D(uFolderMask, uv).r * uFolderOn * smoothstep(uHWater * .5, uHWater * 2.5, H) * (1. - mist);
+        gl_FragColor = vec4(mix(col, uFolderInk, .5 * fm), 1.);
+      }`,
+  }));
+  terrain.frustumCulled = false;
+  scene.add(terrain);
+
+  // paper: a full-screen quad drawn after the terrain at far depth, so early-z skips the covered pixels
+  const paperMesh = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), new THREE.ShaderMaterial({
+    uniforms: U, depthWrite: false,
+    vertexShader: `void main(){ gl_Position = vec4(position.xy, 1., 1.); }`,
+    fragmentShader: `${GLSL_COMMON} void main(){ gl_FragColor = vec4(paper(gl_FragCoord.xy), 1.); }`,
+  }));
+  paperMesh.frustumCulled = false;
+  paperMesh.renderOrder = 10;
+  scene.add(paperMesh);
+
+  // ======================================================================
+  // UI layout boxes (cached: measured on resize, font load and panel changes, never per frame)
+  // ======================================================================
+  let uiBoxes = [];
+  function measureUi(withSlips = true) {
+    uiBoxes = [];
+    for (const el of document.querySelectorAll(".brand, .views, .seal, #again, #folders, .caption, #panel:not(.closed)")) {
+      const r = el.getBoundingClientRect();
+      if (r.width) uiBoxes.push({ x: r.left, y: r.top, w: r.width, h: r.height });
+    }
+    if (withSlips) slips.forEach(s => { s.w = s.el.offsetWidth; s.h = s.el.offsetHeight; });
+  }
+  const isPhone = () => innerWidth <= PHONE_W;
+  const toY = px => 1 - 2 * px / innerHeight;   // CSS px from the top → NDC y
+  const isPortrait = () => innerWidth < innerHeight;
+
+  // ======================================================================
+  // Camera and the five views (Guo Xi's three distances, the plan, and circling the range)
+  // ======================================================================
+  const controls = new OrbitControls(camera, renderer.domElement);
+  controls.enableDamping = true; controls.dampingFactor = 0.08;
+  controls.minPolarAngle = 0.001; controls.maxPolarAngle = MAX_POLAR;
+  controls.minDistance = 140; controls.maxDistance = Math.max(620, W * 2.6);
+  controls.screenSpacePanning = false;
+  const Y_AXIS = new THREE.Vector3(0, 1, 0);
+
+  // the centre of the land that is currently shown (hiding folders moves it)
+  function landCentre(L = world.land) {
+    let x0 = Infinity, x1 = -Infinity, z0 = Infinity, z1 = -Infinity;
+    for (const m of L.massifs) for (const c of m.cells) { x0 = Math.min(x0, cellX(c)); x1 = Math.max(x1, cellX(c)); z0 = Math.min(z0, cellZ(c)); z1 = Math.max(z1, cellZ(c)); }
+    if (!isFinite(x0)) { x0 = bx0; x1 = bx1; z0 = bz0; z1 = bz1; }
+    return { cx: (x0 + x1) / 2, cz: (z0 + z1) / 2 };
+  }
+  const box = landCentre();
+  controls.cursor.set(box.cx, 0, box.cz);
+  controls.maxTargetRadius = 0.6 * W;
+
+  // the host is the biggest folder's massif while it is shown, else the tallest one left
+  function tallestMassif(L) {
+    let best = null;
+    for (const m of L.massifs) if (!best || m.summit.h > best.summit.h) best = m;
+    return L.massifs.find(m => m.plan.rank === 0) || best;
+  }
+  const camFrom = (target, dist, polar, az) => new THREE.Vector3(
+    target.x + dist * Math.sin(polar) * Math.sin(az), target.y + dist * Math.cos(polar), target.z + dist * Math.sin(polar) * Math.cos(az));
+  const rightOf = az => new THREE.Vector3(Math.cos(az), 0, -Math.sin(az));
+  const upOf = (polar, az) => new THREE.Vector3(-Math.cos(polar) * Math.sin(az), Math.sin(polar), -Math.cos(polar) * Math.cos(az));
+
+  // points that must stay in frame: the shoreline at sea level and the relief-scaled upper slopes
+  function massifPoints(m, rel, L = world.land, budget = 400) {
+    const pts = [], step = Math.max(1, Math.floor(m.cells.length / budget));
+    for (let i = 0; i < m.cells.length; i += step) {
+      const c = m.cells[i], x = c % G, z = (c / G) | 0;
+      const shore = [[1, 0], [-1, 0], [0, 1], [0, -1]].some(([a, b]) => L.H[(z + b) * G + x + a] <= LAND_MIN);
+      if (shore || L.H[c] > 0.3 * HMAX) { const p = new THREE.Vector3(cellX(c), shore ? 0 : L.H[c] * rel, cellZ(c)); p.shore = shore; pts.push(p); }
+    }
+    const crown = new THREE.Vector3(m.summit.x, m.summit.h * rel, m.summit.z);
+    crown.crown = true;
+    pts.push(crown);
+    return pts;
+  }
+  // scroll: a portrait phone frames like a hanging scroll: the host and the middle ring's crowns (their names) must
+  // fit; the rest of the guests' slopes may run past the side edges (points marked loose), and the near hills'
+  // shorelines are free: a near hill may be cut by the frame, as at the foot of a scroll
+  function framePoints(polar, budget = 160, scroll = false) {
+    const rel = reliefFor(polar), loose = scroll && isPortrait();
+    const pts = world.land.massifs.flatMap(m => {
+      const p = massifPoints(m, rel, world.land, budget);
+      if (!loose) return p;
+      // "orbit": circling the host, its guests swing freely past the edges; only the host stays whole from every side
+      if (scroll === "orbit" && m.plan.band >= 1) return [];
+      const free = m.plan.band >= 2;
+      p.forEach(q => { q.loose = free || (m.plan.band === 1 && !q.crown); });
+      return free ? p.filter(q => !q.shore) : p;
+    });
+    return pts.length ? pts : nodes.map(n => new THREE.Vector3(n.x, 0, n.z));
+  }
+  // Where the land may lie on screen (NDC). Wide screens keep a margin, with room for the folder list at the bottom.
+  // A portrait phone fits the land between the title block and the two rows of buttons at the bottom, limited by its
+  // width, and centres it in that band.
+  function frameRect(margin) {
+    if (!isPortrait()) {
+      const bottom = isPhone() ? Math.max(-margin + 0.12, 1 - 2 * (document.querySelector(".views").getBoundingClientRect().top - 8) / innerHeight) : -margin + 0.12;
+      return { x0: -margin, x1: margin, y0: bottom, y1: margin, mid: isPhone() ? (bottom + margin) / 2 : 0.06 };
+    }
+    const views = document.querySelector(".views").getBoundingClientRect();
+    const y1 = Math.min(margin, toY(document.querySelector(".brand").getBoundingClientRect().bottom + 10));
+    const y0 = Math.max(-margin, toY((views.height ? views.top : innerHeight) - 10));
+    const xm = Math.min(0.95, margin + 0.08);
+    return { x0: -xm, x1: xm, y0, y1, mid: (y0 + y1) / 2 };
+  }
+  const projCam = camera.clone(), _q = new THREE.Vector3();
+  function aimAt(cam, target, dist, polar, az) { cam.aspect = camera.aspect; cam.updateProjectionMatrix(); cam.position.copy(camFrom(target, dist, polar, az)); cam.lookAt(target); cam.updateMatrixWorld(); }
+  // the closest distance at which every point fits inside the frame rect
+  function fitDistance(target, polar, az, rect, pts) {
+    let lo = 40, hi = 3000;
+    for (let it = 0; it < 26; it++) {
+      const d = (lo + hi) / 2;
+      aimAt(projCam, target, d, polar, az);
+      const ok = pts.every(p => {
+        _q.copy(p).project(projCam);
+        const xl = p.loose ? SCROLL_OVERFLOW * 2 : 0;   // loose points may cross the side edges by SCROLL_OVERFLOW of the width
+        return _q.x > rect.x0 - xl && _q.x < rect.x1 + xl && _q.y > rect.y0 && _q.y < rect.y1 && _q.z < 1;
+      });
+      if (ok) hi = d; else lo = d;
+    }
+    return hi;
+  }
+  function midY(target, dist, polar, az, pts) {
+    aimAt(projCam, target, dist, polar, az);
+    let y0 = Infinity, y1 = -Infinity;
+    for (const p of pts) { _q.copy(p).project(projCam); y0 = Math.min(y0, _q.y); y1 = Math.max(y1, _q.y); }
+    return (y0 + y1) / 2;
+  }
+  // Slide the target along the ground axes to the position that lets the camera come closest, then (centre = true)
+  // along the view axis so the land's vertical middle sits at the frame's middle: fit the land, not the paper.
+  function fitView(target, polar, az, margin, centre = false, scroll = false) {
+    const pts = framePoints(polar, 160, scroll), rect = frameRect(margin);
+    const fwd = new THREE.Vector3(-Math.sin(az), 0, -Math.cos(az)), side = rightOf(az);
+    let best = { target, dist: fitDistance(target, polar, az, rect, pts) };
+    for (const axis of [fwd, side]) for (let s = -40; s <= 40; s += 8) {
+      if (!s) continue;
+      const t = best.target.clone().addScaledVector(axis, s * 0.5), d = fitDistance(t, polar, az, rect, pts);
+      if (d < best.dist - 0.5) best = { target: t, dist: d };
+    }
+    if (centre && polar > 0.01) for (let it = 0; it < 3; it++) {
+      let bestScore = Infinity, next = best;
+      for (let s = -60; s <= 60; s += 5) {
+        const t = best.target.clone().addScaledVector(fwd, s), d = fitDistance(t, polar, az, rect, pts);
+        const score = d * (1 + 2 * Math.abs(midY(t, d, polar, az, pts) - rect.mid));
+        if (score < bestScore) { bestScore = score; next = { target: t, dist: d }; }
+      }
+      best = next;
+    }
+    return { target: best.target, polar, az, dist: best.dist };
+  }
+  const landTarget = (y = 0) => { const c = landCentre(); return new THREE.Vector3(c.cx, y, c.cz); };
+  // Deep distance: looking over the near hills to the host, back and centre; the template's front plus 10° of asymmetry
+  // On a portrait phone frameRect limits the land by the width and centres it between the title and the bottom rows
+  // (a higher camera was tried: it flattens the relief more than it gains height).
+  const deepView = () => fitView(landTarget(), LAY.POLAR, LAY.AZ, 0.86, true, true);
+  // High distance: from the foot of the tallest massif, looking up. The host massif alone is fitted, sits on the
+  // right third (centred on a portrait phone), and the azimuth is the one where no other massif towers over it,
+  // hides it or covers the UI.
+  function highView() {
+    const L = world.land, host = tallestMassif(L);
+    if (!host) return deepView();
+    const polar = HIGH_POLAR, rel = reliefFor(polar), top = host.summit.h * rel;
+    const hostPts = massifPoints(host, rel, L, 400);
+    const others = L.massifs.filter(m => m !== host).map(m => massifPoints(m, rel, L, 40));
+    const q = new THREE.Vector3(), shift = isPortrait() ? 0 : 1 / 3;
+    const inUi = (x, y) => uiBoxes.some(b => x > b.x - 8 && x < b.x + b.w + 8 && y > b.y - 8 && y < b.y + b.h + 8);
+    let best = null;
+    for (let k = 0; k < 16; k++) {
+      const az = LAY.AZ + (k % 2 ? 1 : -1) * Math.ceil(k / 2) * Math.PI / 8;
+      let target = new THREE.Vector3(host.summit.x, top * 0.45, host.summit.z);
+      let dist = Math.max(140, fitDistance(target, polar, az, frameRect(0.8), hostPts));
+      target = target.addScaledVector(rightOf(az), -dist * HALF_FOV_TAN * camera.aspect * shift);   // host on the right third
+      dist = Math.max(140, fitDistance(target, polar, az, frameRect(0.85), hostPts));
+      const c = camFrom(target, dist, polar, az);
+      let score = hAt(c.x, c.z) * rel > c.y - 6 ? 100 : 0;
+      if (occluded(host.summit.x, top * 0.95, host.summit.z, c, rel)) score += 20;
+      if (occluded(host.summit.x, top * 0.4, host.summit.z, c, rel)) score += 10;
+      aimAt(projCam, target, dist, polar, az);
+      q.set(host.summit.x, top, host.summit.z).project(projCam);
+      const hostY = q.y;
+      for (const pts of others) for (const p of pts) {
+        q.copy(p).project(projCam);
+        if (q.z > 1 || Math.abs(q.x) > 1.05) continue;
+        if (q.y > hostY) score += 1;                                                        // towers over the host
+        if (q.y > -1 && inUi((q.x + 1) / 2 * innerWidth, (1 - q.y) / 2 * innerHeight)) score += 0.5;   // covers the UI
+      }
+      for (const p of hostPts) {   // the host itself should not run under the title, legend or caption either
+        q.copy(p).project(projCam);
+        if (q.z < 1 && Math.abs(q.y) < 1 && Math.abs(q.x) < 1 && inUi((q.x + 1) / 2 * innerWidth, (1 - q.y) / 2 * innerHeight)) score += 0.25;
+      }
+      if (!best || score < best.score) best = { target, dist, az, score };
+      if (score === 0) break;
+    }
+    return { target: best.target, polar, az: best.az, dist: best.dist };
+  }
+  // Circle around: an oblique view of the land now shown, far enough that it fits from every side
+  function orbitView(az = currentView().az) {
+    // a portrait phone circles the host itself (its guests swing past the side edges); elsewhere the whole land
+    const host = isPortrait() && tallestMassif(world.land);
+    const target = host ? new THREE.Vector3(host.summit.x, HMAX * 0.15, host.summit.z) : landTarget(HMAX * 0.15);
+    const pts = framePoints(ORBIT_POLAR, 160, "orbit"), rect = frameRect(0.86);
+    let dist = 0;
+    for (let k = 0; k < 8; k++) dist = Math.max(dist, fitDistance(target, ORBIT_POLAR, k * Math.PI / 4, rect, pts));
+    return { target, polar: ORBIT_POLAR, az, dist };
+  }
+  const VIEWS = {
+    above: () => fitView(landTarget(), 0.001, LAY.AZ, 0.8),   // the plan of the composition, the host at the top
+    deep: deepView,
+    level: () => fitView(landTarget(HMAX * 0.3), LAY.LEVEL_POLAR, LAY.AZ, 0.88, true, true),
+    high: highView,
+    orbit: () => orbitView(),
+  };
+  function setView(v) {
+    controls.maxPolarAngle = Math.max(MAX_POLAR, v.polar);
+    controls.minDistance = Math.min(140, v.dist);
+    controls.maxDistance = Math.max(controls.maxDistance, v.dist * 1.25);   // a portrait phone fits from farther away
+    controls.target.copy(v.target);
+    camera.position.copy(camFrom(v.target, v.dist, v.polar, v.az));
+    camera.lookAt(v.target);
+    controls.update();
+  }
+  const viewState = { active: null, flight: null, depthPts: null, orbit: { on: false, pausedUntil: 0, last: 0, ease: null } };
+  const orbitButton = document.querySelector('.views button[data-view="orbit"]');
+  // Reduced motion: nothing circles, so the button turns the view 45° per press and never claims to be "on"
+  if (reduced) {
+    orbitButton.textContent = "Turn around";
+    orbitButton.title = "Turn around: each press turns the view 45° around the range";
+    orbitButton.removeAttribute("aria-pressed");
+  }
+  function setActiveView(name) {
+    viewState.active = name;
+    viewState.orbit.on = name === "orbit" && !reduced;
+    viewState.orbit.pausedUntil = 0; viewState.orbit.ease = null;
+    document.querySelectorAll(".views button").forEach(b => { if (!(reduced && b === orbitButton)) b.setAttribute("aria-pressed", String(b.dataset.view === name)); });
+  }
+  const polarNow = () => Math.acos(clamp((camera.position.y - controls.target.y) / camera.position.distanceTo(controls.target), -1, 1));
+  function currentView() {
+    const t = controls.target.clone();
+    return { target: t, dist: camera.position.distanceTo(t), polar: polarNow(), az: Math.atan2(camera.position.x - t.x, camera.position.z - t.z) };
+  }
+
+  // ======================================================================
+  // The painting: one drawing in 7.5 s with the camera locked
+  // ======================================================================
+  const drawing = { finished: still, start: 0, frozenAt: null, hintTimer: 0 };
+  try { if (localStorage.getItem(STORE_KEY) === "1") drawing.finished = true; } catch (e) { /* storage blocked: play every time */ }
+  const clock = new THREE.Clock();
+  function stage(t) {
+    if (drawing.finished) return { draw: FINISHED_DRAW, wash: 1, paths: 1, seal: 1 };
+    const p = drawing.frozenAt ?? t - drawing.start;
+    return { draw: k01(p, SEQ.paper, SEQ.gou), wash: k01(p, SEQ.gou, SEQ.ran), paths: k01(p, SEQ.ran, SEQ.paths), seal: k01(p, SEQ.paths, SEQ.end), p };
+  }
+
+  // ======================================================================
+  // Moss dots (dian): one per note
+  // ======================================================================
+  const DOT_SCALE = clamp(Math.sqrt(600 / N), 0.6, 1);   // smaller marks in a crowded vault
+  const DOT_GROW = 14;                                     // a dot grows over 1/14 of the outline stage
+  const DOT_LIFT = 1.2;                                    // world units towards the camera, so a mark never sinks in
+  const DOT_LAND_PX = 600, DOT_SCALE_RANGE = [0.4, 1];     // full-size marks once the land stands 600 px tall on screen
+  const DOT_SCALE_U = { value: 1 };                        // shared with the dot shader; set each frame
+  const notePx = deg.map(d => clamp((2.2 + 1.4 * Math.sqrt(d)) * DOT_SCALE, 3, 11));
+  const dotGeo = new THREE.InstancedBufferGeometry().copy(new THREE.PlaneGeometry(2, 2));
+  const dotAttr = {
+    iXZ: new Float32Array(N * 2), iSize: new Float32Array(N), iRec: new Float32Array(N), iSeed: new Float32Array(N),
+    iBorn: new Float32Array(N), iInk: new Float32Array(N * 3), iDim: new Float32Array(N).fill(1), iFocus: new Float32Array(N),
+  };
+  nodes.forEach((n, i) => {
+    dotAttr.iXZ.set([n.x, n.z], i * 2); dotAttr.iSize[i] = notePx[i]; dotAttr.iRec[i] = n.recency;
+    dotAttr.iSeed[i] = hash2(i, 7.7); dotAttr.iBorn[i] = n.u; dotAttr.iInk.set(ink[n.folder].toArray(), i * 3);
+  });
+  for (const [name, arr] of Object.entries(dotAttr)) dotGeo.setAttribute(name, new THREE.InstancedBufferAttribute(arr, arr.length / N));
+  dotGeo.instanceCount = N;
+  // iFocus: 0 plain, 1 linked to the selection, 2 selected, 3 previewed from the panel
+  const dots = new THREE.Mesh(dotGeo, new THREE.ShaderMaterial({
+    uniforms: { ...U, uVermilion: { value: VERMILION }, uDotScale: DOT_SCALE_U }, transparent: true, depthWrite: false,
+    vertexShader: `${GLSL_COMMON}
+      attribute vec2 iXZ; attribute float iSize, iRec, iSeed, iBorn, iDim, iFocus; attribute vec3 iInk;
+      uniform vec3 uVermilion; uniform float uDotScale;
+      varying vec2 vUv; varying float vA, vSeed, vRec, vGrow, vMist, vPx; varying vec3 vInk;
+      void main(){
+        vec4 L = land(iXZ);
+        vec4 mv = viewMatrix * vec4(iXZ.x, L.r * uRelief, iXZ.y, 1.);
+        mv.xyz += normalize(-mv.xyz) * ${DOT_LIFT.toFixed(2)};     // sit on the surface, never in it
+        vec4 clip = projectionMatrix * mv;
+        float g = clamp((uDraw - max(iBorn, L.a)) * ${DOT_GROW}., 0., 1.);   // a dot lands once its ground is inked
+        vGrow = 1. - pow(1. - g, 3.);
+        bool focus = iFocus > .5, linked = iFocus > .5 && iFocus < 1.5 || iFocus > 2.5;
+        vUv = position.xy; vA = iDim; vSeed = iSeed; vRec = focus ? 1. : iRec;
+        vInk = linked ? uVermilion : iInk;
+        vMist = focus ? 0. : min(mistAt(iXZ, L.r, -mv.z), .35);  // dots are exempt from the atmosphere
+        // the marks shrink with the land on screen (a phone), so they stay moss dots rather than blots; focus keeps its size
+        float size = iSize * (iFocus > 1.5 ? 2. : focus ? 1.6 : uDotScale);   // selected or previewed ×2, linked ×1.6
+        vPx = size;
+        clip.xy += position.xy * vec2(1.8, 1.) * size * .9 * uDpr / uViewport * 2. * clip.w;
+        gl_Position = clip;
+      }`,
+    fragmentShader: `${GLSL_COMMON} ${VNOISE}
+      varying vec2 vUv; varying float vA, vSeed, vRec, vGrow, vMist, vPx; varying vec3 vInk;
+      void main(){
+        if (vGrow <= 0. || vA <= 0.) discard;
+        vec2 p = vUv;
+        float d = length(p), ang = atan(p.y, p.x);
+        float wob = vn(vec2(cos(ang), sin(ang)) * 1.7 + vSeed * 17.) - .5;
+        float edge = (.62 + .36 * (1. - vRec) + wob * .3) * vGrow;     // old notes have bled further
+        float coreR = (.5 + wob * .22) * min(vGrow * 1.6, 1.);
+        float inside = smoothstep(edge, edge - .12, d);
+        float halo = inside * (.08 + .3 * vn(p * 6. + vSeed * 9.)) * (1. - .5 * d / max(edge, .01)) * smoothstep(2.5, 4.5, vPx);   // no halo on tiny marks
+        float core = smoothstep(coreR, coreR * .66, d) * (.75 + .25 * vn(p * 5. + vSeed));
+        float a = (core * mix(.45, 1., pow(vRec, .7)) + halo * mix(.9, .5, vRec)) * vA * (1. - vMist);
+        if (a < .01) discard;
+        gl_FragColor = vec4(vInk * (1. - core * .2), a);
+      }`,
+  }));
+  dots.frustumCulled = false; dots.renderOrder = 3;
+  scene.add(dots);
+  const renderedAlpha = i => dotAttr.iFocus[i] > 0 ? dotAttr.iDim[i] : dotAttr.iDim[i] * lerp(0.45, 1, Math.pow(nodes[i].recency, 0.7));
+
+  // ======================================================================
+  // Ribbons: trails between massifs, shore ripples, and the focus note's links
+  // ======================================================================
+  const RIBBON_KIND = { trail: 0, ripple: 1, link: 2 };
+  const RIBBON_VS = `${GLSL_COMMON}
+    attribute vec2 aPrev, aNext; attribute vec4 aInfo, aMeta;   // info: side, t, width px, alpha. meta: kind, start, seed, distance
+    varying float vT, vSide, vA, vSeed, vMist, vBridge, vDist, vKind, vStart, vH;
+    float yAt(vec2 xz, float kind){
+      if (kind > .5 && kind < 1.5) return .25;                     // ripples lie on the water
+      return max(land(xz).r, uHWater + 1.) * uRelief + .6;         // bridges stay flat over water
+    }
+    vec4 clipAt(vec2 xz, float kind){ return projectionMatrix * viewMatrix * vec4(xz.x, yAt(xz, kind), xz.y, 1.); }
+    void main(){
+      float kind = aMeta.x;
+      vec2 xz = position.xz;
+      vec4 c = clipAt(xz, kind), p = clipAt(aPrev, kind), n = clipAt(aNext, kind);
+      vec2 asp = vec2(uViewport.x / uViewport.y, 1.);
+      vec2 d = n.xy / n.w * asp - p.xy / p.w * asp;
+      d = length(d) > 1e-7 ? normalize(d) : vec2(1., 0.);
+      float t = aInfo.y;
+      float taper = kind > 1.5 ? 1. : (.55 + .45 * smoothstep(0., .08, t)) * (.6 + .4 * smoothstep(1., .85, t));
+      float w = max(aInfo.z * taper, 1.5) * uDpr;                   // never thinner than 1.5 device px
+      c.xy += vec2(-d.y, d.x) / asp * aInfo.x * w / uViewport.y * c.w;
+      c.z -= .0004 * c.w;                                           // depth bias of about 2 world units toward the camera
+      gl_Position = c;
+      float h = land(xz).r;
+      vH = h;
+      vT = t; vSide = aInfo.x; vA = aInfo.w; vSeed = aMeta.z; vDist = aMeta.w; vKind = kind; vStart = aMeta.y;
+      vBridge = kind < .5 ? 1. - smoothstep(uHWater * .6, uHWater, h) : 0.;
+      vec4 mv = viewMatrix * vec4(xz.x, yAt(xz, kind), xz.y, 1.);
+      float atm = kind > 1.5 ? 1. : mix(1., .4, smoothstep(.12, .95, (-mv.z - uDNear) / max(uDFar - uDNear, 1.)));
+      vMist = 1. - atm * (1. - min(mistAt(xz, h, -mv.z), kind > 1.5 ? .35 : 1.));
+    }`;
+  const RIBBON_FS = `${GLSL_COMMON} ${VNOISE}
+    uniform float uPaths, uMul; uniform vec3 uColor;
+    varying float vT, vSide, vA, vSeed, vMist, vBridge, vDist, vKind, vStart, vH;
+    void main(){
+      float drawn = 1.;
+      // trails: oldest massif first; they keep to the feet and saddles and fade out above 1.5× the valley mist
+      if (vKind < .5) drawn = smoothstep(0., .02, (uPaths - vStart) / .4 - vT) * (1. - smoothstep(1.5 * uHMist, 2. * uHMist, vH));
+      else if (vKind < 1.5) drawn = smoothstep(0., .15, uWashP * 1.3 - vStart);   // ripples come with the wash
+      float bristles = vn(vec2(vDist * .7 + vSeed * 50., vSide * 4.5 + vSeed * 9.));
+      float dry = vKind > 1.5 ? .15 + .5 * vT : .3 + .5 * fract(vDist / 55. + vSeed);   // the brush runs dry, then is reloaded
+      float kasure = smoothstep(dry, dry + .3, bristles + .3);
+      float a = vA * kasure * drawn * uMul * (1. - vMist) * (1. + .45 * vBridge);
+      if (a < .01) discard;
+      gl_FragColor = vec4(uColor, min(a, 1.));
+    }`;
+  const ribbonMat = (mul, extra = {}) => new THREE.ShaderMaterial({
+    uniforms: { ...U, uMul: { value: mul }, uColor: { value: new THREE.Color(0x18181c) } }, transparent: true, depthWrite: false,
+    side: THREE.DoubleSide, vertexShader: RIBBON_VS, fragmentShader: RIBBON_FS, ...extra,
+  });
+  function ribbonGeometry(strokes) {
+    let nv = 0, ni = 0;
+    for (const s of strokes) { nv += s.pts.length * 2; ni += (s.pts.length - 1) * 6; }
+    const pos = new Float32Array(nv * 3), prev = new Float32Array(nv * 2), next = new Float32Array(nv * 2);
+    const info = new Float32Array(nv * 4), meta = new Float32Array(nv * 4), idx = new Uint32Array(ni);
+    let v = 0, k = 0;
+    for (const s of strokes) {
+      const P = s.pts, m = P.length, first = v;
+      let dist = 0;
+      for (let j = 0; j < m; j++) {
+        if (j) dist += Math.hypot(P[j][0] - P[j - 1][0], P[j][1] - P[j - 1][1]);
+        for (const side of [-1, 1]) {
+          pos.set([P[j][0], 0, P[j][1]], v * 3); prev.set(P[Math.max(j - 1, 0)], v * 2); next.set(P[Math.min(j + 1, m - 1)], v * 2);
+          info.set([side, j / (m - 1), s.w, s.a], v * 4); meta.set([s.kind, s.start || 0, s.seed, dist], v * 4);
+          v++;
+        }
+        if (j < m - 1) { const i0 = first + j * 2; idx.set([i0, i0 + 1, i0 + 2, i0 + 1, i0 + 3, i0 + 2], k); k += 6; }
+      }
+    }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute("position", new THREE.BufferAttribute(pos, 3));
+    g.setAttribute("aPrev", new THREE.BufferAttribute(prev, 2));
+    g.setAttribute("aNext", new THREE.BufferAttribute(next, 2));
+    g.setAttribute("aInfo", new THREE.BufferAttribute(info, 4));
+    g.setAttribute("aMeta", new THREE.BufferAttribute(meta, 4));
+    g.setIndex(new THREE.BufferAttribute(idx, 1));
+    return g;
+  }
+  const trails = new THREE.Mesh(new THREE.BufferGeometry(), ribbonMat(1));
+  const overlayGeo0 = new THREE.BufferGeometry();
+  const linkBack = new THREE.Mesh(overlayGeo0, ribbonMat(0.3, { depthFunc: THREE.GreaterDepth }));   // faintly, through ridges
+  const linkFront = new THREE.Mesh(overlayGeo0, ribbonMat(0.85));
+  for (const [mesh, order] of [[trails, 1], [linkBack, 2], [linkFront, 4]]) { mesh.frustumCulled = false; mesh.renderOrder = order; scene.add(mesh); }
+
+  // ======================================================================
+  // Trail routing: A* over a 128² cost grid, so trails follow valleys and passes
+  // ======================================================================
+  const AG = 128, ACELL = W / (AG - 1);
+  const TRAIL_WANDER = 1.2;           // amplitude of the cost noise: footpaths wander a little, without loops
+  const TRAIL_CAP = [3, 6];            // trails: half the massifs, between these
+  const TRAIL_DETOUR = 1.6;            // a route longer than this × the straight line is dropped
+  const TRAIL_COST = { slope: 8, height: 2, water: 0.6 };
+  const RIPPLE_STROKES = [[0, 8], [-1.8, 5.5], [-3.6, 3.2]];   // per ripple: [offset from the shore, length], world units
+  const RIPPLE_COUNT = [12, 30], RIPPLE_GAP = 14;              // 4 per massif within this range, this far apart
+  // cost = 1 + 8·slope + 2·height, a little extra over water, plus low-frequency noise so trails wander like footpaths
+  function costGrid(L) {
+    if (L.cost) return L.cost;
+    const cost = new Float32Array(AG * AG);
+    for (let z = 0; z < AG; z++) for (let x = 0; x < AG; x++) {
+      const k = Math.round(z * (G - 1) / (AG - 1)) * G + Math.round(x * (G - 1) / (AG - 1));
+      const slope = Math.min(1, Math.hypot(L.GXa[k], L.GZa[k]) / 2.5);
+      cost[z * AG + x] = 1 + TRAIL_COST.slope * slope + TRAIL_COST.height * L.H[k] / HMAX + (L.H[k] < H_WATER ? TRAIL_COST.water : 0) + TRAIL_WANDER * vnoise(x * ACELL / 11 + 3.1, z * ACELL / 11 + 8.7);
+    }
+    return (L.cost = cost);
+  }
+  function astar(L, from, to) {
+    const cost = costGrid(L);
+    const cellA = p => [clamp(Math.round((p[0] - GX0) / ACELL), 0, AG - 1), clamp(Math.round((p[1] - GZ0) / ACELL), 0, AG - 1)];
+    const [sx, sz] = cellA(from), [tx, tz] = cellA(to), start = sz * AG + sx, goal = tz * AG + tx;
+    const g = new Float32Array(AG * AG).fill(Infinity), came = new Int32Array(AG * AG).fill(-1), closed = new Uint8Array(AG * AG);
+    const open = new MinHeap();
+    g[start] = 0; open.push(0, start);
+    while (open.size) {
+      const c = open.pop();
+      if (c === goal) break;
+      if (closed[c]) continue;
+      closed[c] = 1;
+      const cx = c % AG, cz = (c / AG) | 0;
+      for (let dz = -1; dz <= 1; dz++) for (let dx = -1; dx <= 1; dx++) {
+        const x = cx + dx, z = cz + dz;
+        if ((!dx && !dz) || x < 0 || z < 0 || x >= AG || z >= AG) continue;
+        const q = z * AG + x, ng = g[c] + (dx && dz ? Math.SQRT2 : 1) * (cost[c] + cost[q]) / 2;
+        if (ng < g[q]) { g[q] = ng; came[q] = c; open.push(ng + Math.hypot(tx - x, tz - z), q); }
+      }
+    }
+    const path = [];
+    for (let c = goal; c >= 0; c = came[c]) { path.push([GX0 + (c % AG) * ACELL, GZ0 + ((c / AG) | 0) * ACELL]); if (c === start) break; }
+    path.reverse();
+    // drop the grid staircase: keep every third cell, then let Chaikin round it off
+    const thin = path.filter((p, j) => j % 3 === 0 || j === path.length - 1);
+    thin[0] = from.slice(); thin[thin.length - 1] = to.slice();
+    return thin;
+  }
+  function smoothResample(P, spacing) {
+    for (let it = 0; it < 4; it++) {   // Chaikin corner cutting
+      const Q = [P[0]];
+      for (let j = 0; j < P.length - 1; j++) {
+        const a = P[j], b = P[j + 1];
+        Q.push([a[0] * .75 + b[0] * .25, a[1] * .75 + b[1] * .25], [a[0] * .25 + b[0] * .75, a[1] * .25 + b[1] * .75]);
+      }
+      Q.push(P[P.length - 1]); P = Q;
+    }
+    const out = [P[0]]; let acc = 0;
+    for (let j = 1; j < P.length; j++) {
+      acc += Math.hypot(P[j][0] - P[j - 1][0], P[j][1] - P[j - 1][1]);
+      if (acc >= spacing || j === P.length - 1) { out.push(P[j]); acc = 0; }
+    }
+    return out;
+  }
+  // a few trails, not a net: one per massif pair, only the strongest pairs
+  function trailStrokes(L) {
+    const pairs = new Map();
+    links.forEach(([a, b]) => {
+      if (!shown(a) || !shown(b)) return;
+      let ma = world.massifOfNote[a], mb = world.massifOfNote[b];
+      if (ma < 0 || mb < 0 || ma === mb) return;
+      if (ma > mb) { [ma, mb] = [mb, ma]; [a, b] = [b, a]; }
+      const key = `${ma}:${mb}`;
+      if (!pairs.has(key)) pairs.set(key, { ma, mb, n: 0, ends: [[], []] });
+      const p = pairs.get(key); p.n++; p.ends[0].push(a); p.ends[1].push(b);
+    });
+    const all = [...pairs.values()].sort((p, q) => q.n - p.n), topN = all.length ? all[0].n : 1;
+    const born = p => Math.min(L.massifs[p.ma].birth, L.massifs[p.mb].birth);
+    const cap = clamp(Math.ceil(L.massifs.length / 2), TRAIL_CAP[0], TRAIL_CAP[1]);
+    const cand = all.filter(p => p.n >= Math.max(2, 0.3 * topN));
+    // a trail leaves a massif at its foot, where the valley mist lies, on the side facing its partner: trails cross at
+    // the saddles and through the misty feet, never up a face
+    const foot = (a, b) => {
+      const A = L.massifs[a].summit, B = L.massifs[b].summit, d = Math.hypot(B.x - A.x, B.z - A.z) || 1;
+      for (let t = 0; t <= d; t += CELL * 0.5) { const x = A.x + (B.x - A.x) * t / d, z = A.z + (B.z - A.z) * t / d; if (sampleH(L.H, x, z) <= H_MIST) return [x, z]; }
+      return [B.x, B.z];
+    };
+    const strength = n => Math.log2(1 + n) / Math.log2(1 + topN);
+    const list = [];
+    for (const p of cand) {   // the strongest pairs, without detours longer than TRAIL_DETOUR × the chord
+      if (list.length >= cap) break;
+      const a = foot(p.ma, p.mb), b = foot(p.mb, p.ma), path = astar(L, a, b);
+      let len = 0;
+      for (let j = 1; j < path.length; j++) len += Math.hypot(path[j][0] - path[j - 1][0], path[j][1] - path[j - 1][1]);
+      if (len <= TRAIL_DETOUR * Math.max(Math.hypot(b[0] - a[0], b[1] - a[1]), CELL)) list.push({ ...p, path });
+    }
+    list.sort((p, q) => born(p) - born(q));
+    world.trailCount = list.length;
+    return list.map((p, r) => ({
+      pts: smoothResample(p.path, 1.4),
+      w: 1.5 + 2.5 * strength(p.n), a: 0.3 + 0.3 * strength(p.n), kind: RIBBON_KIND.trail,
+      start: list.length > 1 ? 0.6 * r / (list.length - 1) : 0, seed: hash2(p.ma, p.mb),
+    }));
+  }
+  // ripples: 12 to 30 short strokes along the shores, in the density band just below the sea-level cut
+  function rippleStrokes(L) {
+    const cand = [];
+    for (let k = 0; k < G2; k += 3) if (L.D[k] > 0.06 && L.D[k] < 0.3 && L.H[k] < LAND_MIN) cand.push(k);
+    cand.sort((a, b) => hash2(a, 1.3) - hash2(b, 1.3));
+    const picked = [], most = clamp(L.massifs.length * 4, ...RIPPLE_COUNT), MIN_GAP = RIPPLE_GAP;
+    for (const k of cand) {
+      if (picked.length >= most) break;
+      if (!picked.some(j => Math.hypot(cellX(j) - cellX(k), cellZ(j) - cellZ(k)) < MIN_GAP)) picked.push(k);
+    }
+    const strokes = [];
+    for (const k of picked) {
+      const gx = L.D[Math.min(k + 1, G2 - 1)] - L.D[Math.max(k - 1, 0)], gz = L.D[Math.min(k + G, G2 - 1)] - L.D[Math.max(k - G, 0)];
+      const gl = Math.hypot(gx, gz) || 1, nx = gx / gl, nz = gz / gl, tx = -nz, tz = nx;   // n points to land, t runs along the shore
+      RIPPLE_STROKES.forEach(([off, len], j) => {
+        const sd = hash2(k, j), cx = cellX(k) + nx * off + tx * (sd - .5) * 3, cz = cellZ(k) + nz * off + tz * (sd - .5) * 3, pts = [];
+        for (let s = 0; s <= 6; s++) { const u = s / 6 - .5, bow = (1 - 4 * u * u) * 0.5; pts.push([cx + tx * u * len + nx * bow, cz + tz * u * len + nz * bow]); }
+        strokes.push({ pts, w: 1.5, a: 0.5 - 0.1 * j, kind: RIBBON_KIND.ripple, start: hash2(k, 9) * 0.3, seed: sd });
+      });
+    }
+    return strokes;
+  }
+  function rebuildGround(L) {
+    // crowns and summits first, then shoulders by height: the cun strokes radiate from the nearest of these
+    const centres = L.massifs.flatMap(m => m.tops).sort((a, b) => (a.feat.kind === "shoulder") - (b.feat.kind === "shoulder") || b.h - a.h).slice(0, CUN_CENTRES);
+    centres.forEach((c, i) => U.uSummits.value[i].set(c.x, c.z));
+    U.uSummitCount.value = centres.length;
+    world.massifOfNote.fill(-1);
+    L.massifs.forEach(m => m.notes.forEach(i => { world.massifOfNote[i] = m.id; }));
+    trails.geometry.dispose();
+    trails.geometry = ribbonGeometry([...trailStrokes(L), ...rippleStrokes(L)]);
+  }
+
+  // ======================================================================
+  // Emphasis: search, hover, selection and folder hover decide how strongly each dot and link is drawn
+  // ======================================================================
+  const ui = { query: "", selected: -1, hovered: -1, preview: -1, folderHover: null, hidden: new Set(), returnFocus: null };
+  const matches = i => !ui.query || nodes[i].title.toLowerCase().includes(ui.query) || nodes[i].path.toLowerCase().includes(ui.query);
+  const shown = i => !ui.hidden.has(nodes[i].folder);
+
+  function updateEmphasis() {
+    const sel = ui.selected, focusI = sel >= 0 ? sel : ui.hovered;
+    const focus = focusI >= 0 ? new Set([focusI, ...adj[focusI]]) : null;
+    for (let i = 0; i < N; i++) {
+      let d = shown(i) ? 1 : 0;
+      if (sel < 0 && !matches(i)) d *= 0.18;                     // once a note is selected the search no longer dims
+      if (ui.folderHover && nodes[i].folder !== ui.folderHover) d *= 0.35;
+      if (focus && !focus.has(i)) d *= sel >= 0 ? 0.5 : 0.55;
+      dotAttr.iDim[i] = d;
+      dotAttr.iFocus[i] = !shown(i) ? 0 : i === ui.preview ? 3 : i === sel ? 2 : sel >= 0 && focus.has(i) ? 1 : 0;
+    }
+    dotGeo.attributes.iDim.needsUpdate = dotGeo.attributes.iFocus.needsUpdate = true;
+    trails.material.uniforms.uMul.value = focus ? (sel >= 0 ? 0.3 : 0.6) : (ui.query ? 0.45 : 1);
+    wake();
+  }
+  // the focus note's links, draped directly: vermilion when selected, faint sumi on hover
+  function buildOverlay() {
+    const f = ui.selected >= 0 ? ui.selected : ui.hovered, selected = ui.selected >= 0;
+    const strokes = [];
+    if (f >= 0 && shown(f)) for (const j of adj[f]) {
+      if (!shown(j)) continue;
+      const A = [nodes[f].x, nodes[f].z], B = [nodes[j].x, nodes[j].z], len = Math.hypot(B[0] - A[0], B[1] - A[1]) || 1;
+      const seed = hash2(f, j), bend = (seed - .5) * len * .3, px = -(B[1] - A[1]) / len, pz = (B[0] - A[0]) / len;
+      const ctrl = [(A[0] + B[0]) / 2 + px * bend, (A[1] + B[1]) / 2 + pz * bend], pts = [];
+      const samples = Math.max(24, Math.ceil(len / 2));
+      for (let s = 0; s <= samples; s++) { const t = s / samples, u = 1 - t; pts.push([u * u * A[0] + 2 * u * t * ctrl[0] + t * t * B[0], u * u * A[1] + 2 * u * t * ctrl[1] + t * t * B[1]]); }
+      const alpha = selected ? 1 : 0.33 * Math.min(1, Math.pow(40 / len, 0.8));   // ma: long hover links stay faint
+      strokes.push({ pts, w: selected ? 2.6 : 1.6, a: alpha, kind: RIBBON_KIND.link, seed });
+    }
+    const g = ribbonGeometry(strokes);
+    if (linkFront.geometry !== overlayGeo0) linkFront.geometry.dispose();
+    linkFront.geometry = linkBack.geometry = g;
+    for (const m of [linkFront, linkBack]) m.material.uniforms.uColor.value.set(selected ? 0xb83a26 : 0x18181c);
+  }
+
+  // ======================================================================
+  // Folders: hover lays a wash over the folder's region, a toggle reshapes the land
+  // ======================================================================
+  const maskData = new Uint8Array(G2);
+  const maskTex = new THREE.DataTexture(maskData, G, G, THREE.RedFormat, THREE.UnsignedByteType);
+  maskTex.minFilter = maskTex.magFilter = THREE.LinearFilter; maskTex.needsUpdate = true;
+  U.uFolderMask.value = maskTex;
+  // the wash covers the land that belongs to the folder's massif, softened by a few cells
+  function setFolderWash(f) {
+    ui.folderHover = f;
+    if (f) {
+      const L = world.land, m = L.massifs.findIndex(m => m.folder === f);
+      maskData.fill(0);
+      if (m >= 0) for (const c of L.massifs[m].cells) {
+        const x = c % G, z = (c / G) | 0;
+        for (let b = -2; b <= 2; b++) for (let a = -2; a <= 2; a++) {
+          const xx = x + a, zz = z + b;
+          if (xx >= 0 && zz >= 0 && xx < G && zz < G) maskData[zz * G + xx] = Math.max(maskData[zz * G + xx], 255 - 40 * Math.max(Math.abs(a), Math.abs(b)));
+        }
+      }
+      maskTex.needsUpdate = true;
+      U.uFolderInk.value.copy(ink[f]);
+    }
+    updateEmphasis();
+  }
+  function reshape() {
+    if (world.blend) finishBlend();
+    const L = buildLand(f => !ui.hidden.has(f));
+    U.uLandB.value = landTexture(L); U.uStrataB.value = strataTexture(L);
+    world.prev = world.land; world.land = L; U.uBlend.value = 0;
+    world.blend = { t0: clock.getElapsedTime() };
+    if (reduced) finishBlend();
+    rebuildGround(L); buildSlips(L); measureUi(); viewState.depthPts = null;
+    wake();
+  }
+  function finishBlend() {
+    const old = U.uLandA.value, oldS = U.uStrataA.value;
+    U.uLandA.value = U.uLandB.value; U.uStrataA.value = U.uStrataB.value; U.uBlend.value = 0; world.prev = world.land;
+    if (old !== U.uLandA.value) old.dispose();
+    if (oldS !== U.uStrataA.value) oldS.dispose();
+    world.blend = null;
+  }
+
+  // ======================================================================
+  // Name slips (tanzaku): a cartouche per massif; slips for summits, shoulders, years and spots as you get closer
+  // ======================================================================
+  // Every slip has its own anchor, never shared: a massif's is its crown's top (the crown belongs to the top folder
+  // only), a summit's or shoulder's its measured top, a year's its stratum at mid-height 41° right of the front, a
+  // spot's its point. A slip shows once it is big enough on screen (or the camera is close enough), its top and the
+  // camera-facing quarter below it are visible, and it fits beside its anchor within a 5% screen-area budget. Timing
+  // hysteresis keeps names from blinking while the camera circles.
+  const SLIP_PX = { massif: 40, summit: 44, shoulder: 30, year: 18, spot: Infinity };    // on-screen size to show
+  const SLIP_ZOOM = { massif: Infinity, summit: 12, shoulder: 16, year: 12, spot: 20 };  // or px per world unit of height
+  const SLIP_PRI = { massif: 3, summit: 2, shoulder: 1, year: 0.5, spot: 0.3 };
+  const SLIP_KEEP = 0.8;             // a shown slip stays until it is below 0.8× the size that showed it
+  const SLIP_BUDGET = 0.05;          // share of the viewport that slips may cover…
+  const SLIP_NEWCOMER = 0.85;        // …of which newcomers may only fill this much
+  const SLIP_SLIDE = 120, SLIP_STEP = 10;   // px a slip may slide down its flank to dodge another (at most half its mountain)
+  const SLIP_NEAR = 30;              // px of slide tried on both sides before sliding farther
+  const SLIP_HAIR = 16;              // a slip moved farther than this from its spot gets a hairline to its anchor
+  const SLIP_INSET = 0.04;           // newcomers' anchors stay this far (× the short side) inside the frame
+  const SLIP_MARGIN = { shown: [6, 2], newcomer: [20, 10] };
+  const SLIP_T = { show: 0.5, hideHidden: 0.33, hideSoft: 1.3, dwell: 2.2 };   // seconds
+  let slips = [], slipOfFolder = new Map(), slipFresh = true;
+  const slipEvents = [];
+  // a year's anchor: its band at mid-height, on the stratum's front-right edge
+  function yearAnchor(H, f, a, b) {
+    const phi = (90 - LAY.TERRACE_SECTOR * 0.55) * DEG, r = surfaceAt(H, f, phi, (a + b) / 2, 3 * f.w + 12);
+    return [f.x + r * Math.cos(phi), f.z + r * Math.sin(phi)];
+  }
+  function buildSlips(L) {
+    $("slips").replaceChildren();
+    const items = [];
+    for (const M of L.massifs) {
+      const m = M.plan, crown = L.topOf.get(m.feats[0]);
+      const home = items.length;
+      items.push({ kind: "massif", name: folderLabel(m.folder), folder: m.tree, x: crown.x, z: crown.z, top: crown.h, sad: 0, home });
+      const subs = [...m.feats.slice(1), ...m.spotFeats], count = new Map();
+      subs.forEach(f => count.set(f.name, (count.get(f.name) || 0) + 1));
+      const label = f => count.get(f.name) > 1 && f.folder.parent ? `${f.folder.parent.name} / ${f.name}` : f.name;   // "Tema 1 / Notas"
+      for (const f of m.feats.slice(1)) { const t = L.topOf.get(f); items.push({ kind: f.kind, name: label(f), folder: f.folder, x: t.x, z: t.z, top: t.h, sad: t.sad, home }); }
+      for (const f of m.spotFeats) items.push({ kind: "spot", name: label(f), folder: f.folder, x: f.x, z: f.z, top: sampleH(L.H, f.x, f.z), home });
+      for (const [f] of m.terr) f.years.forEach(([a, b], y) => {
+        const [x, z] = yearAnchor(L.H, f, a, b);
+        items.push({ kind: "year", name: y.name, folder: y, x, z, a, b, top: (a + b) / 2, home });
+      });
+    }
+    slips = items.map(it => {
+      const el = document.createElement("div");
+      el.className = { massif: "slip", summit: "slip sub", shoulder: "slip sub", year: "slip flat", spot: "slip flat spot" }[it.kind];
+      el.textContent = it.name;
+      const hair = document.createElement("div");
+      hair.className = "hair";
+      $("slips").append(hair, el);
+      return { ...it, el, hair, w: el.offsetWidth, h: el.offsetHeight, on: false, off: null, changed: -Infinity, okSince: null, failSince: null, why: "new", op: -1 };
+    });
+    slips.forEach(s => { s.home = slips[s.home]; });   // each slip's massif (whose size bounds the slide)
+    slipOfFolder = new Map(slips.map(s => [s.folder, s]));
+    slipFresh = true;
+  }
+  // the selected note's folder slip: its feature, or the year of its stratum
+  function slipForNote(i) {
+    for (let f = nodes[i].home; f; f = f.alias || f.parent) { const s = slipOfFolder.get(f); if (s) return s; }
+    return null;
+  }
+  // the point on the peak's camera-facing surface a quarter of its prominence below the top (an axis point would be
+  // inside the rock)
+  function quarterPoint(s, rel) {
+    const lvl = s.top - 0.25 * (s.top - s.sad), cx = camera.position.x - s.x, cz = camera.position.z - s.z, n = Math.hypot(cx, cz) || 1;
+    let r = 0;
+    while (r < 60 && hAt(s.x + r * cx / n, s.z + r * cz / n) > lvl) r += 0.25;
+    return [s.x + r * cx / n, (lvl + 0.4) * rel, s.z + r * cz / n];
+  }
+  // Decide and place every slip for this frame. now: seconds; immediate: settle without the timing rules.
+  // Returns true while a slip is waiting to change (the caller keeps rendering).
+  function updateSlips(now, seal, immediate = false) {
+    const rel = U.uRelief.value, cam = camera.position, Wv = innerWidth, Hv = innerHeight;
+    const sel = ui.selected >= 0 && shown(ui.selected) ? slipForNote(ui.selected) : null;
+    for (const s of slips) {
+      let top, show, lo, hi;
+      if (s.kind === "year" || s.kind === "spot") {
+        const y = s.top;
+        top = [s.x, (y + 1.2) * rel, s.z]; show = [s.x, (y + 0.1) * rel, s.z];   // stay while surface + 1.2 is visible, show at + 0.1
+        lo = (s.kind === "year" ? s.a : y) * rel; hi = (s.kind === "year" ? s.b : y + 6) * rel;
+      } else { top = [s.x, s.top * rel + 0.3, s.z]; show = null; lo = s.sad * rel; hi = s.top * rel; }
+      const [sx, sy, sz] = toScreen(top[0], top[1], top[2]);
+      s.sx = sx; s.sy = sy;
+      s.size = Math.abs(toScreen(s.x, hi, s.z)[1] - toScreen(s.x, lo, s.z)[1]);
+      const zoom = Math.abs(toScreen(top[0], top[1] + rel, top[2])[1] - sy), k = s.on ? SLIP_KEEP : 1;
+      // on a phone a year needs the zoom rule: in the overview its thin stratum would bury the host under names
+      const big = (s.kind === "year" && isPhone() ? false : s.size >= k * SLIP_PX[s.kind]) || zoom >= k * SLIP_ZOOM[s.kind];
+      const inset = s.on ? 0 : SLIP_INSET * Math.min(Wv, Hv);   // a newcomer must be well inside: it would leave at once
+      if (sz > 1 || sx <= inset || sx >= Wv - inset || sy <= inset || sy >= Hv - inset) s.why = "frame";
+      else if (!big && s !== sel) s.why = "size";
+      else if (occluded(top[0], top[1], top[2], cam, rel)) s.why = "occ";
+      else if (!s.on && occluded(...(show || quarterPoint(s, rel)), cam, rel)) s.why = "occ";
+      else s.why = null;
+    }
+    // greedy placement: the selected folder, then shown slips, then by priority and on-screen size
+    const taken = uiBoxes.slice(), budget = SLIP_BUDGET * Wv * Hv, vis = new Set();
+    let area = 0;
+    const reserve = s => { if (s.on && s.off) taken.push({ x: s.sx + s.off[0], y: s.sy + s.off[1], w: s.w, h: s.h }); };   // a slip in its grace time keeps its place
+    const order = slips.slice().sort((a, b) => (b === sel) - (a === sel) || b.on - a.on || SLIP_PRI[b.kind] - SLIP_PRI[a.kind] || b.size - a.size);
+    for (const s of order) {
+      if (s.why) { reserve(s); continue; }
+      const sideA = s.kind === "massif" ? 12 : -s.w - 10, sideB = s.kind === "massif" ? -s.w - 12 : 10;   // massifs hang right, the rest left
+      const offs = [];
+      // the slide never leaves the slip's own mountain (half its height on screen), and a phone keeps names closer
+      const slide = Math.min(SLIP_SLIDE * Math.min(1, Wv / 1000), 0.5 * s.home.size);
+      for (const ox of [sideA, sideB]) for (let oy = -6; oy <= Math.max(slide, -6); oy += SLIP_STEP) offs.push([ox, oy]);
+      const far = o => (o[1] + 6 > SLIP_NEAR) * 10;   // both sides near the anchor before either side far down
+      const cost = s.on && s.off ? o => (o[0] !== s.off[0]) * 1000 + Math.abs(o[1] - s.off[1]) : o => far(o) + (o[0] !== sideA) * 0.5 + Math.abs(o[1] + 6) / 10;
+      offs.sort((a, b) => cost(a) - cost(b));
+      const [mx, my] = s.on ? SLIP_MARGIN.shown : SLIP_MARGIN.newcomer;
+      let placed = null, bySlip = false;
+      const hits = (r, o) => r.x < o.x + o.w + mx && o.x < r.x + r.w + mx && r.y < o.y + o.h + my && o.y < r.y + r.h + my;
+      for (const [ox, oy] of offs) {
+        const r = { x: s.sx + ox, y: s.sy + oy, w: s.w, h: s.h };
+        if (r.x < 8 || r.x + r.w > Wv - 20 || r.y < 0 || r.y + r.h > Hv) continue;
+        if (taken.some(o => hits(r, o))) { bySlip ||= taken.some((o, j) => j >= uiBoxes.length && hits(r, o)); continue; }
+        placed = r; s.off = [ox, oy]; break;
+      }
+      // "edge": no room between the frame edge and the UI (a frame cause); "collide": another name is in the way
+      if (placed && (s === sel || area + s.w * s.h <= budget * (s.on ? 1 : SLIP_NEWCOMER))) { taken.push(placed); area += s.w * s.h; vis.add(s); }
+      else { s.why = placed ? "budget" : bySlip ? "collide" : "edge"; reserve(s); }
+    }
+    // timing: a newcomer qualifies for 0.5 s; a hidden or off-frame anchor loses its name after 0.33 s, a crowded or
+    // small one after 1.3 s; at least 2.2 s between two changes of one slip. The selected folder shows at once.
+    let pending = false;
+    const settle = immediate || slipFresh;
+    for (const s of slips) {
+      const want = vis.has(s);
+      if (want) { s.okSince ??= now; s.failSince = null; } else { s.okSince = null; s.failSince ??= now; }
+      if (want === s.on) continue;
+      let flip;
+      if (settle || (want && s === sel)) flip = true;
+      else if (want) flip = now - s.okSince >= SLIP_T.show - 1e-6 && now - s.changed >= SLIP_T.dwell;
+      else {
+        const hard = s.why === "occ" || s.why === "frame";   // "edge" waits like a crowded slip: anchors near the border would blink
+        flip = (hard && now - s.failSince >= SLIP_T.hideHidden - 1e-6) || (now - s.failSince >= SLIP_T.hideSoft - 1e-6 && now - s.changed >= SLIP_T.dwell);
+      }
+      if (flip) {
+        s.on = want; s.changed = now;
+        slipEvents.push({ t: +now.toFixed(2), name: s.name, kind: s.kind, on: want, why: want ? null : s.why, slip: s });
+        if (slipEvents.length > 400) slipEvents.shift();
+      } else pending = true;
+    }
+    slipFresh = false;
+    for (const s of slips) {
+      const op = s.on && seal > 0 ? Math.min(1, seal * 3) : 0;
+      if (op !== s.op) { s.el.style.opacity = op; s.op = op; }
+      if (s.on && s.off) s.el.style.transform = `translate(${Math.round(s.sx + s.off[0])}px, ${Math.round(s.sy + s.off[1])}px)`;
+      // a slip slid down its flank keeps a hairline to its anchor
+      const slid = s.on && s.off && s.off[1] + 6 > SLIP_HAIR;
+      if (slid) {
+        const ex = s.off[0] > 0 ? s.sx + s.off[0] : s.sx + s.off[0] + s.w, ey = s.sy + s.off[1] + 4;
+        const len = Math.hypot(ex - s.sx, ey - s.sy), ang = Math.atan2(ey - s.sy, ex - s.sx);
+        s.hair.style.width = len + "px";
+        s.hair.style.transform = `translate(${s.sx}px, ${s.sy}px) rotate(${ang}rad)`;
+      }
+      const hop = slid ? op * 0.6 : 0;
+      if (hop !== s.hop) { s.hair.style.opacity = hop; s.hop = hop; }
+    }
+    return pending;
+  }
+
+  // ======================================================================
+  // Projection, occlusion and picking: the same relief-scaled heightfield as the GPU
+  // ======================================================================
+  const _p = new THREE.Vector3();
+  function toScreen(x, y, z) { _p.set(x, y, z).project(camera); return [(_p.x + 1) / 2 * innerWidth, (1 - _p.y) / 2 * innerHeight, _p.z]; }
+  // march from the camera to the point, stopping 1.5 units short; hidden if the land rises 0.8 above the ray
+  function occluded(px, py, pz, cam, rel) {
+    const dx = px - cam.x, dy = py - cam.y, dz = pz - cam.z, len = Math.hypot(dx, dy, dz);
+    const f1 = Math.max(0, (len - 1.5) / len), ceiling = HMAX * rel;
+    const f0 = dy < 0 && cam.y > ceiling ? Math.min(f1, (cam.y - ceiling) / -dy) : 0;   // skip the ray above every summit
+    const steps = clamp(Math.ceil((f1 - f0) * len / 2.5), 40, 200);   // never stride past a thin spire
+    for (let s = 0; s <= steps; s++) {
+      const f = f0 + (f1 - f0) * s / steps;
+      if (hAt(cam.x + dx * f, cam.z + dz * f) * rel > cam.y + dy * f + 0.8) return true;
+    }
+    return false;
+  }
+  const noteY = i => hAt(nodes[i].x, nodes[i].z) * U.uRelief.value;
+  function pick(x, y) {
+    const cand = [];
+    for (let i = 0; i < N; i++) {
+      if (renderedAlpha(i) < 0.2) continue;                   // only what you can actually see
+      const [sx, sy, sz] = toScreen(nodes[i].x, noteY(i), nodes[i].z);
+      if (sz > 1) continue;
+      const d = Math.hypot(sx - x, sy - y);
+      if (d < Math.max(notePx[i] * DOT_SCALE_U.value * 0.9, 8)) cand.push([d, i]);
+    }
+    cand.sort((a, b) => a[0] - b[0]);
+    for (const [, i] of cand.slice(0, 4)) if (!occluded(nodes[i].x, noteY(i), nodes[i].z, camera.position, U.uRelief.value)) return i;
+    return -1;
+  }
+
+  // ======================================================================
+  // Camera flights
+  // ======================================================================
+  // a hover belongs to the pointer's spot on the painting: any camera move clears it (tooltip and faint links)
+  function clearHover() {
+    if (ui.hovered < 0 && tip.style.opacity !== "1") return;
+    tip.style.opacity = 0;
+    if (ui.hovered >= 0) { ui.hovered = -1; if (ui.selected < 0) buildOverlay(); updateEmphasis(); }
+  }
+  function flyTo(v, ms = 1400) {
+    clearHover();
+    if (reduced) { viewState.flight = null; setView(v); slipFresh = true; wake(); return; }   // a jump: names settle at once
+    viewState.flight = { from: currentView(), to: v, t0: performance.now(), ms };
+    wake(ms / 1000 + 4);
+  }
+  function stepFlight() {
+    const f = viewState.flight;
+    if (!f) return;
+    const k = ease(Math.min((performance.now() - f.t0) / f.ms, 1)), a = f.from, b = f.to;
+    const daz = Math.atan2(Math.sin(b.az - a.az), Math.cos(b.az - a.az));
+    setView({ target: a.target.clone().lerp(b.target, k), dist: Math.exp(lerp(Math.log(a.dist), Math.log(b.dist), k)), polar: lerp(a.polar, b.polar, k), az: a.az + daz * k });
+    if (k >= 1) viewState.flight = null;
+  }
+  // reduced motion: "Turn around" steps the oblique overview 45° per press instead of circling
+  function turnAround() {
+    setActiveView(null);
+    flyTo(orbitView(currentView().az + TURN_STEP));
+    $("status").textContent = "Turned the view 45 degrees";
+  }
+  function goView(name) {
+    if (name === "orbit" && reduced) { turnAround(); return; }
+    setActiveView(name); flyTo(VIEWS[name]());
+  }
+  controls.addEventListener("start", () => {
+    viewState.flight = null;
+    clearHover();
+    if (controls.maxPolarAngle > MAX_POLAR + 1e-4) controls.maxPolarAngle = MAX_POLAR;   // High distance is cleared on drag
+    if (viewState.orbit.on) { viewState.orbit.pausedUntil = Infinity; viewState.orbit.ease = null; }   // a drag or zoom pauses the circling…
+    else setActiveView(null);
+  });
+  controls.addEventListener("end", () => {
+    if (viewState.orbit.on) viewState.orbit.pausedUntil = clock.getElapsedTime() + ORBIT_IDLE;   // …until a few idle seconds
+  });
+  // Circle around: turn the camera about the target, so it resumes wherever the user left it. After a drag or zoom it
+  // eases back to the orbit's own distance, height and centre over ORBIT_EASE seconds. The frame loop's single
+  // controls.update() does the rest.
+  function stepOrbit(t) {
+    const o = viewState.orbit, dt = Math.min(t - o.last, 0.25);
+    o.last = t;
+    if (!o.on || reduced || viewState.flight || !drawing.finished) return false;
+    if (t < o.pausedUntil) return false;
+    if (o.pausedUntil > 0) {   // resuming
+      const v = currentView();
+      o.ease = { t0: t, from: v, to: orbitView(v.az) };
+      o.pausedUntil = 0;
+    }
+    const da = dt * 2 * Math.PI / ORBIT_PERIOD;
+    if (o.ease) {
+      const k = ease(Math.min((t - o.ease.t0) / ORBIT_EASE, 1)), a = o.ease.from, b = o.ease.to;
+      const az = currentView().az + da;
+      controls.target.copy(a.target).lerp(b.target, k);
+      camera.position.copy(camFrom(controls.target, Math.exp(lerp(Math.log(a.dist), Math.log(b.dist), k)), lerp(a.polar, b.polar, k), az));
+      if (k >= 1) o.ease = null;
+    } else {
+      camera.position.sub(controls.target).applyAxisAngle(Y_AXIS, da).add(controls.target);
+    }
+    return true;
+  }
+  // The selection camera faces the note's side of its feature (the front for dated notes): it tries that azimuth and
+  // ±30°, ±60° at the current polar clamped to 45°–62°, then 45°, then 35°, and never goes lower.
+  function selectionView(i) {
+    const cur = currentView(), n = nodes[i], f = n.feat, ids = [i, ...adj[i].filter(shown)];
+    const az0 = f && !n.onBand && Math.hypot(n.x - f.x, n.z - f.z) > 0.5 ? Math.atan2(n.x - f.x, n.z - f.z) : LAY.AZ;
+    // a portrait phone fits the note and its links in the band between the title block and the bottom panel
+    const portrait = isPortrait();
+    const bandTop = toY(document.querySelector(".brand").getBoundingClientRect().bottom + 8);
+    const bandBottom = toY((panel.classList.contains("closed") ? innerHeight * 0.55 : panel.getBoundingClientRect().top) - 8);
+    const half = Math.max((bandTop - bandBottom) / 2, 0.15), bandMid = (bandTop + bandBottom) / 2;
+    const rect = portrait ? { x0: -0.85, x1: 0.85, y0: -half, y1: half } : { x0: -0.6, x1: 0.6, y0: -0.48, y1: 0.6 };
+    let fallback = null;
+    for (const polar of [clamp(cur.polar, ...SELECT_POLAR), ...SELECT_FALLBACK]) for (const daz of SELECT_AZ) {
+      const az = az0 + daz * DEG, rel = reliefFor(polar);
+      const pts = ids.map(j => new THREE.Vector3(nodes[j].x, hAt(nodes[j].x, nodes[j].z) * rel, nodes[j].z));
+      const target = pts[0].clone();
+      const dist = clamp(fitDistance(target, polar, az, rect, pts), ...SELECT_DIST);
+      if (portrait) target.addScaledVector(upOf(polar, az), -bandMid * dist * HALF_FOV_TAN);   // in the band above the bottom panel
+      else if (!isPhone()) target.addScaledVector(rightOf(az), PANEL_CLEAR_PX * 2 * dist * HALF_FOV_TAN / innerHeight);   // left of the panel
+      const v = { target, dist, polar, az };
+      if (!occluded(pts[0].x, pts[0].y, pts[0].z, camFrom(target, dist, polar, az), rel)) return v;
+      if (!daz) fallback = v;   // hidden everywhere: the steepest view straight at the note's side
+    }
+    return fallback;
+  }
+  function flyToNote(i) {
+    setActiveView(null);
+    flyTo(selectionView(i), 1200);
+  }
+
+  // ======================================================================
+  // Header, legend, panel and search
+  // ======================================================================
+  $("vault").textContent = VAULT_NAME;
+  document.title = `${VAULT_NAME} in ink: mountains`;
+  $("counts").textContent = `${N.toLocaleString("en")} notes, ${links.length.toLocaleString("en")} links`;
+  $("colophon").hidden = !hasDates;
+  const month = s => new Date(s * 1000).toLocaleDateString("en-GB", { month: "long", year: "numeric" });
+  const lastT = Math.max(...nodes.map(n => Math.max(n.mtime || 0, n.created || 0)));
+  let colophonText = "";
+  function updateColophon(draw) {
+    if (!hasDates) return;
+    let upTo = lastT;
+    if (draw < 1) {   // the latest note born so far (u grows with the birth order)
+      let lo = 0, hi = N - 1;
+      while (lo < hi) { const m = (lo + hi + 1) >> 1; if (nodes[byBirth[m]].u <= draw) lo = m; else hi = m - 1; }
+      upTo = bornAt(byBirth[lo]);
+    }
+    const text = `Painted from ${month(firstT)} to ${month(upTo)}`;
+    if (text !== colophonText) { $("colophon").textContent = colophonText = text; measureUi(false); }   // the title block's box grows with it
+  }
+
+  for (const f of folders) {
+    const li = document.createElement("li"), b = document.createElement("button");
+    b.setAttribute("aria-pressed", "true");
+    b.innerHTML = `<span class="dab"></span><span class="name"></span><span class="n"></span>`;
+    b.querySelector(".dab").style.background = "#" + ink[f].getHexString();
+    b.querySelector(".name").textContent = folderLabel(f);
+    b.querySelector(".n").textContent = folderCount[f];
+    b.onclick = () => {
+      ui.hidden.has(f) ? ui.hidden.delete(f) : ui.hidden.add(f);
+      b.setAttribute("aria-pressed", String(!ui.hidden.has(f)));
+      if (ui.selected >= 0 && ui.hidden.has(nodes[ui.selected].folder)) deselect();
+      reshape(); buildOverlay(); updateEmphasis();
+    };
+    b.onmouseenter = b.onfocus = () => setFolderWash(f);
+    b.onmouseleave = b.onblur = () => { if (ui.folderHover === f) setFolderWash(null); };
+    li.appendChild(b);
+    $("folders").appendChild(li);
+  }
+  document.querySelectorAll(".views button").forEach(b => { b.onclick = () => { finishDrawing(); goView(b.dataset.view); }; });
+
+  function ago(mtime) {
+    if (!mtime) return "";
+    const s = Date.now() / 1000 - mtime;
+    for (const [sec, name] of [[31536000, "year"], [2592000, "month"], [604800, "week"], [86400, "day"], [3600, "hour"], [60, "minute"]])
+      if (s >= sec) { const v = Math.floor(s / sec); return `Last edited ${v} ${name}${v > 1 ? "s" : ""} ago`; }
+    return "Last edited just now";
+  }
+  const tip = $("tip"), stamp = $("stamp"), panel = $("panel");
+  function showTipAt(i) {
+    const [sx, sy] = toScreen(nodes[i].x, noteY(i), nodes[i].z);
+    tip.textContent = nodes[i].title;
+    Object.assign(tip.style, { opacity: 1, left: sx + 14 + "px", top: sy + 10 + "px" });
+  }
+  function setPreview(j) {
+    ui.preview = j;
+    if (j >= 0) showTipAt(j); else tip.style.opacity = 0;
+    updateEmphasis();
+  }
+  function select(i) {
+    const active = document.activeElement;
+    // remember where to return focus: the search box for a result, else what had focus (a linked-note click keeps the first)
+    if (!panel.contains(active)) ui.returnFocus = active && active.closest && active.closest("#results") ? $("q") : active;
+    ui.selected = i; ui.hovered = -1; ui.preview = -1;
+    const n = nodes[i];
+    $("p-title").textContent = n.title;
+    $("p-path").textContent = n.home.chain.length > 1 || n.folder !== ROOT ? n.home.chain.map(folderLabel).join(" / ") : "Vault root";
+    $("p-edited").textContent = ago(n.mtime);
+    $("p-tags").textContent = n.tags.map(t => "#" + t).join("  ");
+    $("p-links-h").textContent = adj[i].length ? `Linked notes (${adj[i].length})` : "Linked notes";
+    const list = $("p-links");
+    list.replaceChildren();
+    if (!adj[i].length) list.appendChild(Object.assign(document.createElement("li"), { className: "none", textContent: "No [[links]] to or from this note yet." }));
+    [...adj[i]].sort((a, b) => nodes[a].title.localeCompare(nodes[b].title)).forEach(j => {
+      const li = document.createElement("li"), b = document.createElement("button");
+      b.textContent = nodes[j].title;
+      b.onclick = () => select(j);
+      b.onmouseenter = b.onfocus = () => setPreview(j);
+      b.onmouseleave = b.onblur = () => { if (ui.preview === j) setPreview(-1); };
+      li.appendChild(b); list.appendChild(li);
+    });
+    $("results").replaceChildren();
+    panel.classList.remove("closed"); document.body.classList.add("panel-open");
+    tip.style.opacity = 0;
+    $("status").textContent = `${n.title} selected, ${adj[i].length} linked note${adj[i].length === 1 ? "" : "s"}`;
+    $("p-title").focus({ preventScroll: true });
+    measureUi();
+    buildOverlay(); updateEmphasis();
+    flyToNote(i);
+  }
+  function deselect() {
+    if (ui.selected < 0) return;
+    ui.selected = -1; ui.preview = -1;
+    panel.classList.add("closed"); document.body.classList.remove("panel-open");
+    $("status").textContent = "Selection cleared";
+    const back = ui.returnFocus;
+    if (back && back !== document.body && back.isConnected) back.focus({ preventScroll: true });
+    else if (panel.contains(document.activeElement)) document.activeElement.blur();
+    measureUi();
+    buildOverlay(); updateEmphasis();
+  }
+  $("p-open").onclick = () => {
+    if (ui.selected >= 0) location.href = `obsidian://open?vault=${encodeURIComponent(VAULT_NAME)}&file=${encodeURIComponent(nodes[ui.selected].path)}`;
+  };
+  document.querySelector("#panel .close").onclick = deselect;
+
+  // search: prefix matches first, then shorter titles; ↑ and ↓ move through the results
+  const q = $("q"), results = $("results");
+  q.oninput = () => {
+    ui.query = q.value.trim().toLowerCase();
+    results.replaceChildren();
+    if (ui.query) {
+      const found = [];
+      for (let i = 0; i < N; i++) if (matches(i) && shown(i)) found.push(i);
+      const rank = i => (nodes[i].title.toLowerCase().startsWith(ui.query) ? 0 : 1e6) + nodes[i].title.length;
+      found.sort((a, b) => rank(a) - rank(b) || nodes[a].title.localeCompare(nodes[b].title));
+      for (const i of found.slice(0, 6)) {
+        const li = document.createElement("li"), b = document.createElement("button");
+        b.textContent = nodes[i].title;
+        b.onclick = () => select(i);
+        li.appendChild(b); results.appendChild(li);
+      }
+    }
+    updateEmphasis();
+  };
+  q.onkeydown = e => {
+    if (e.key === "Enter" && results.firstChild) { e.preventDefault(); results.firstChild.firstChild.click(); }
+    if (e.key === "ArrowDown" && results.firstChild) { e.preventDefault(); results.firstChild.firstChild.focus(); }
+    if (e.key === "Escape") { q.value = ""; q.oninput(); q.blur(); }
+  };
+  results.onkeydown = e => {
+    const items = [...results.querySelectorAll("button")], k = items.indexOf(document.activeElement);
+    if (e.key === "ArrowDown" && k >= 0) { e.preventDefault(); items[Math.min(k + 1, items.length - 1)].focus(); }
+    if (e.key === "ArrowUp" && k >= 0) { e.preventDefault(); (k ? items[k - 1] : q).focus(); }
+  };
+
+  // ======================================================================
+  // Drawing control and input
+  // ======================================================================
+  const hint = $("hint"), seal = $("seal"), again = $("again");
+  again.hidden = still;   // with reduced motion (or #still) the painting is never replayed
+  function finishDrawing() {
+    if (drawing.finished) return;
+    drawing.finished = true; drawing.frozenAt = null;
+    try { localStorage.setItem(STORE_KEY, "1"); } catch (e) { /* storage blocked */ }
+    controls.enabled = true;
+    hint.classList.add("gone");
+    wake();
+  }
+  function showHint() {
+    clearTimeout(drawing.hintTimer);
+    hint.classList.remove("gone");
+    drawing.hintTimer = setTimeout(() => hint.classList.add("gone"), 2000);
+  }
+  function paintAgain() {
+    if (still) { finishDrawing(); return; }
+    deselect();
+    drawing.finished = false; drawing.start = clock.getElapsedTime();
+    controls.enabled = false; viewState.flight = null;
+    showHint();
+    wake();
+  }
+  again.onclick = e => { e.stopPropagation(); paintAgain(); };
+
+  const input = { down: null, downFinished: false };
+  addEventListener("keydown", e => {
+    const typing = document.activeElement === q;
+    if (!drawing.finished) { finishDrawing(); if (e.key === "/") { e.preventDefault(); q.focus(); } return; }
+    if (e.key === "/" && !typing) { e.preventDefault(); q.focus(); }
+    else if (e.key === "Escape" && ui.selected >= 0 && !typing) deselect();
+    else if (!typing && /^[1-5]$/.test(e.key)) goView(["above", "deep", "level", "high", "orbit"][+e.key - 1]);
+    else if (!typing && e.key.startsWith("Arrow") && !e.target.closest?.("#results")) {
+      const v = currentView(), step = 10 * DEG;
+      if (e.key === "ArrowLeft") v.az -= step;
+      if (e.key === "ArrowRight") v.az += step;
+      if (e.key === "ArrowUp") v.polar = Math.max(0.001, v.polar - step);
+      if (e.key === "ArrowDown") v.polar = Math.min(MAX_POLAR, v.polar + step);
+      setActiveView(null);
+      flyTo(v, 300);
+    }
+  }, true);
+  addEventListener("pointerdown", () => { if (!drawing.finished) { input.downFinished = true; finishDrawing(); } }, true);
+  addEventListener("wheel", () => finishDrawing(), { capture: true, passive: true });
+  addEventListener("pointerup", () => { input.downFinished = false; });   // bubble phase: after the canvas has seen it
+
+  const cv = renderer.domElement;
+  cv.setAttribute("role", "img");
+  cv.addEventListener("pointermove", e => {
+    if (!drawing.finished || e.buttons) return;
+    const i = pick(e.clientX, e.clientY);
+    if (i !== ui.hovered) { ui.hovered = i; if (ui.selected < 0) buildOverlay(); updateEmphasis(); }
+    cv.style.cursor = i >= 0 ? "pointer" : "";
+    if (i < 0) { tip.style.opacity = 0; return; }
+    tip.textContent = nodes[i].title;
+    Object.assign(tip.style, { opacity: 1, left: e.clientX + 14 + "px", top: e.clientY + 10 + "px" });
+  });
+  cv.addEventListener("pointerleave", () => { tip.style.opacity = 0; if (ui.hovered >= 0) { ui.hovered = -1; if (ui.selected < 0) buildOverlay(); updateEmphasis(); } });
+  cv.addEventListener("pointerdown", e => { input.down = [e.clientX, e.clientY]; });
+  cv.addEventListener("pointerup", e => {
+    if (input.downFinished) { input.downFinished = false; input.down = null; return; }   // that click only finished the painting
+    if (!input.down || Math.hypot(e.clientX - input.down[0], e.clientY - input.down[1]) > 5) return;   // that was a drag
+    const i = pick(e.clientX, e.clientY);
+    if (i >= 0) select(i); else deselect();
+  });
+
+  // ======================================================================
+  // Frame loop: renders on demand once the painting is done
+  // ======================================================================
+  const frame = { awakeUntil: 0, times: [], last: 0, dpr: DPR, first: true };
+  function wake(s = 4) { frame.awakeUntil = Math.max(frame.awakeUntil, clock.getElapsedTime() + s); }
+  controls.addEventListener("change", () => wake());
+  const medianFrame = () => { const s = [...frame.times].sort((a, b) => a - b); return s.length ? s[s.length >> 1] : 0; };
+
+  // the atmosphere spans the real near-to-far range of the land (shore and upper slopes); the two depth bands of mist
+  // sit in the gaps between the host and the middle ring, and between the middle and the near ring
+  function updateDepthRange() {
+    viewState.depthPts ??= framePoints(0).map(p => [p.x, sampleH(world.land.H, p.x, p.z), p.z]);
+    const rel = U.uRelief.value, m = camera.matrixWorldInverse.elements;
+    const depth = (x, h, z) => -(m[2] * x + m[6] * h * rel + m[10] * z + m[14]);
+    let near = Infinity, far = -Infinity;
+    let y0 = Infinity, y1 = -Infinity;
+    for (const [x, h, z] of viewState.depthPts) {
+      const d = depth(x, h, z);
+      if (d < near) near = d; if (d > far) far = d;
+      if (d > 1) { const y = (m[1] * x + m[5] * h * rel + m[9] * z + m[13]) / d; if (y < y0) y0 = y; if (y > y1) y1 = y; }
+    }
+    // the land's height on screen sets the size of the moss dots
+    const landPx = isFinite(y0) ? (y1 - y0) / HALF_FOV_TAN * innerHeight / 2 : DOT_LAND_PX;
+    DOT_SCALE_U.value = clamp(landPx / DOT_LAND_PX, ...DOT_SCALE_RANGE);
+    if (!isFinite(near)) { near = 100; far = 600; }
+    U.uDNear.value = Math.max(near, 1); U.uDFar.value = Math.max(far, near + 1);
+    const ring = [[], [], []];
+    for (const M of world.land.massifs) ring[Math.min(M.plan.band, 2)].push(depth(M.plan.x, 0.3 * M.plan.h, M.plan.z));
+    const mean = a => a.reduce((s, v) => s + v, 0) / a.length, dn = d => (d - U.uDNear.value) / (U.uDFar.value - U.uDNear.value);
+    const gap = (a, b, dflt) => a.length && b.length ? clamp(dn((mean(a) + mean(b)) / 2), 0.1, 0.9) : dflt;
+    U.uMistBands.value.set(gap(ring[0], ring[1], 0.35), gap(ring[1], ring[2], 0.7));
+  }
+  function placeOverlays(st, now) {
+    const rel = U.uRelief.value;
+    // the hanko frames the selected dot, only when the dot is visible
+    const sel = ui.selected;
+    if (sel >= 0 && shown(sel)) {
+      const n = nodes[sel], y = noteY(sel), [sx, sy, sz] = toScreen(n.x, y, n.z);
+      const visible = sz < 1 && !occluded(n.x, y, n.z, camera.position, rel), s = Math.max(notePx[sel] * 3.4, 26);   // the selected dot keeps its full size
+      Object.assign(stamp.style, { opacity: visible ? 0.85 : 0, left: sx - s / 2 + "px", top: sy - s / 2 + "px", width: s + "px", height: s + "px", transform: "rotate(-5deg)" });
+    } else stamp.style.opacity = 0;
+    return updateSlips(now, st.seal);
+  }
+  addEventListener("resize", () => {
+    camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix();
+    renderer.setSize(innerWidth, innerHeight);
+    U.uViewport.value.set(innerWidth * frame.dpr, innerHeight * frame.dpr);
+    measureUi();
+    refit();
+    wake();
+  });
+  // a preset view is refitted when the window changes shape (a rotated phone, a resized window)
+  function refit() {
+    const a = viewState.active;
+    if (!a || viewState.flight) return;
+    viewState.orbit.ease = null;
+    setView(a === "orbit" ? orbitView() : VIEWS[a]());
+    slipFresh = true;
+  }
+
+  renderer.setAnimationLoop(() => {
+    const t = clock.getElapsedTime();
+    if (!drawing.finished && drawing.frozenAt === null && t - drawing.start >= SEQ.end) finishDrawing();
+    stepFlight();
+    const orbiting = stepOrbit(t);
+    if (orbiting) clearHover();
+    controls.update();
+    const washTarget = ui.folderHover ? 1 : 0;
+    if (U.uFolderOn.value !== washTarget) U.uFolderOn.value = reduced ? washTarget : clamp(U.uFolderOn.value + (washTarget ? 0.08 : -0.08), 0, 1);
+    if (world.blend) { const b = k01(t, world.blend.t0, world.blend.t0 + 0.8); U.uBlend.value = ease(b); if (b >= 1) finishBlend(); }
+    const busy = !drawing.finished || viewState.flight || world.blend || U.uFolderOn.value !== washTarget || orbiting;
+    if (!busy && !frame.first && t > frame.awakeUntil) { frame.last = 0; return; }
+    frame.first = false;
+    const st = stage(t);
+    U.uDraw.value = st.draw; U.uWashP.value = st.wash; U.uPaths.value = st.paths;
+    if (!reduced) U.uTime.value = t;   // mist drift
+    const polar = polarNow();
+    U.uPolar.value = polar; U.uRelief.value = reliefFor(polar);
+    camera.updateMatrixWorld();
+    updateDepthRange();
+    seal.classList.toggle("unstamped", st.seal <= 0.05);
+    updateColophon(st.draw);
+    if (placeOverlays(st, performance.now() / 1000)) wake(0.6);   // a name is waiting to appear or fade
+    renderer.render(scene, camera);
+    // median frame time, and a lower pixel ratio if the finished painting is slow on this machine
+    const now = performance.now();
+    if (frame.last) { frame.times.push(now - frame.last); if (frame.times.length > 120) frame.times.shift(); }
+    frame.last = now;
+    if (drawing.finished && frame.dpr > 1 && frame.times.length >= 60 && medianFrame() > 22) {
+      frame.dpr = 1; renderer.setPixelRatio(1); renderer.setSize(innerWidth, innerHeight);
+      U.uDpr.value = 1; U.uViewport.value.set(innerWidth, innerHeight); frame.times.length = 0;
+    }
+  });
+
+  // ======================================================================
+  // Start
+  // ======================================================================
+  rebuildGround(world.land);
+  buildSlips(world.land);
+  measureUi();
+  const startView = VIEWS[(hash.match(/view=(\w+)/) || [])[1]] ? hash.match(/view=(\w+)/)[1] : "deep";
+  setView(VIEWS[startView]());
+  setActiveView(startView);
+  // slip and UI boxes change when the web fonts arrive; a portrait frame depends on the title block's height
+  document.fonts?.ready.then(() => { measureUi(); if (isPortrait() && !controls.enabled) refit(); slipFresh = true; wake(); });
+  buildOverlay();
+  updateEmphasis();
+  cv.setAttribute("aria-label", `An ink painting of ${VAULT_NAME}: ${world.land.massifs.length} mountains, ${N} notes, ${links.length} links. Use the search box or the folder list to explore.`);
+  const paintHash = debug && hash.match(/paint=([\d.]+)/);   // test hook: hold the drawing at a fixed time
+  if (paintHash) { drawing.finished = false; drawing.frozenAt = +paintHash[1]; }
+  if (!drawing.finished) { controls.enabled = false; showHint(); }
+
+  // ======================================================================
+  // Test hooks (read-only, except the camera and the slip clock): DESIGN_V3 section 9
+  // ======================================================================
+  const r2 = v => Math.round(v * 100) / 100;
+  // camera at a view, matrices and relief updated, without rendering
+  function poseCamera(v) {
+    camera.position.copy(camFrom(v.target, v.dist, v.polar, v.az)); controls.target.copy(v.target); camera.lookAt(v.target);
+    camera.updateMatrixWorld(); U.uRelief.value = reliefFor(v.polar);
+  }
+  function prominence() {
+    const L = world.land, rows = [];
+    for (const M of L.massifs) for (const f of M.plan.feats.slice(1)) {
+      const t = L.topOf.get(f), p = L.topOf.get(f.parent), prom = t.cell === p.cell ? 0 : t.h - t.sad;
+      rows.push({ folder: f.folder.chain.join("/"), kind: f.kind, top: r2(t.h), saddle: r2(t.sad), prom: r2(prom), pct: r2(100 * prom / p.h), ownTop: t.cell !== p.cell });
+    }
+    const worst = k => rows.filter(r => r.kind === k).sort((a, b) => a.pct - b.pct)[0] || null;
+    const fails = rows.filter(r => !r.ownTop || (r.kind === "summit" && r.pct < 12) || (r.kind === "shoulder" && (r.pct < 6 || r.prom < 1.5)));
+    let chord = Infinity;   // sibling summits (and the crown): distance between tops / mean width
+    for (const M of L.massifs) {
+      const fs = M.plan.feats.filter(f => f.kind !== "shoulder");
+      for (let a = 0; a < fs.length; a++) for (let b = a + 1; b < fs.length; b++) {
+        const A = L.topOf.get(fs[a]), B = L.topOf.get(fs[b]);
+        chord = Math.min(chord, Math.hypot(A.x - B.x, A.z - B.z) / ((fs[a].w + fs[b].w) / 2));
+      }
+    }
+    return { count: rows.length, minSummit: worst("summit"), minShoulder: worst("shoulder"), failures: fails, minChord: r2(chord), rows };
+  }
+  function compositionInfo() {
+    const L = world.land, hs = L.massifs.map(M => M.summit.h).sort((a, b) => b - a);
+    const Rh = massifsAll[0].Reff;
+    return {
+      lambda: r2(composition.lambda), aspect: r2(composition.aspect), hostOverNext: hs.length > 1 ? r2(hs[0] / hs[1]) : null,
+      massifs: massifsAll.map(m => ({
+        folder: m.folder, n: m.n, band: m.band, h: r2(m.h), measured: L.topOf.get(m.feats[0]) ? r2(L.topOf.get(m.feats[0]).h) : null, R: r2(m.R), Reff: r2(m.Reff),
+        x: r2(m.x), z: r2(m.z), theta: r2(m.rank ? Math.atan2(m.x, m.z) / DEG : 0), behindHost: m.band === 1 && m.z < -0.2 * Rh,
+        outsideArc: m.rank > 0 && Math.abs(Math.atan2(m.x, m.z) / DEG) > LAY.THETA_MAX[Math.min(m.band - 1, 1)],
+        summits: m.feats.filter(f => f.kind !== "shoulder").length, shoulders: m.feats.filter(f => f.kind === "shoulder").length,
+        spots: m.spotFeats.length, strata: m.terr.reduce((s, [f]) => s + f.bands.length, 0), years: m.terr.reduce((s, [f]) => s + f.years.size, 0),
+      })),
+    };
+  }
+  // land components, how many massifs share the host's, and the highest saddle between two massifs' crowns
+  function joins() {
+    const L = world.land, lab = new Int32Array(G2), H = L.H;
+    let nc = 0;
+    for (let k = 0; k < G2; k++) {
+      if (H[k] <= LAND_MIN || lab[k]) continue;
+      nc++; const stack = [k]; lab[k] = nc;
+      while (stack.length) {
+        const c = stack.pop(), x = c % G, z = (c / G) | 0;
+        for (const [q, ok] of [[c - 1, x > 0], [c + 1, x < G - 1], [c - G, z > 0], [c + G, z < G - 1]]) if (ok && !lab[q] && H[q] > LAND_MIN) { lab[q] = nc; stack.push(q); }
+      }
+    }
+    const host = tallestMassif(L), hc = lab[host.summit.cell];
+    let top = 0, pair = null;
+    for (let a = 0; a < L.massifs.length; a++) for (let b = a + 1; b < L.massifs.length; b++) {
+      const A = L.massifs[a].summit.cell, B = L.massifs[b].summit.cell;
+      if (lab[A] && lab[A] === lab[B]) { const s = saddleBetween(H, A, B); if (s > top) { top = s; pair = [L.massifs[a].folder, L.massifs[b].folder]; } }
+    }
+    return { components: nc, joinedToHost: L.massifs.filter(m => lab[m.summit.cell] === hc).length, massifs: L.massifs.length,
+      highestSaddle: r2(top), pair, mistTop: r2((LAY.MIST[0] + LAY.MIST[1]) * LAY.H_HOST) };
+  }
+  // share of the screen whose ray misses the land (blank paper), sampled every `step` px
+  function paperShare(step = 8) {
+    const ray = new THREE.Raycaster(), ndc = new THREE.Vector2(), rel = U.uRelief.value;
+    let miss = 0, all = 0;
+    for (let y = step / 2; y < innerHeight; y += step) for (let x = step / 2; x < innerWidth; x += step) {
+      ndc.set(x / innerWidth * 2 - 1, 1 - y / innerHeight * 2); ray.setFromCamera(ndc, camera);
+      const o = ray.ray.origin, d = ray.ray.direction;
+      let hit = false;
+      if (d.y < 0) {
+        const t1 = o.y / -d.y, t0 = Math.max(0, (o.y - HMAX * rel - 1) / -d.y);
+        for (let s = 0; s <= 300; s++) {
+          const t = t0 + (t1 - t0) * s / 300, px = o.x + d.x * t, pz = o.z + d.z * t;
+          const h = hAt(px, pz);
+          if (h > LAND_MIN && h * rel >= o.y + d.y * t) { hit = true; break; }
+        }
+      }
+      all++; if (!hit) miss++;
+    }
+    return r2(miss / all);
+  }
+  function hostCheck() {
+    const L = world.land, host = tallestMassif(L), rel = U.uRelief.value;
+    const ys = L.massifs.map(m => [m, toScreen(m.summit.x, m.summit.h * rel, m.summit.z)]);
+    const hy = ys.find(([m]) => m === host)[1];
+    return { hostX: r2(hy[0] / innerWidth), hostY: r2(hy[1] / innerHeight), topmost: ys.every(([m, p]) => m === host || p[1] >= hy[1]) };
+  }
+  function anchors() {
+    const shownS = slips.filter(s => s.on), ids = slips.map(s => `${s.x.toFixed(2)},${s.z.toFixed(2)},${s.kind === "year" ? s.top : ""}`);
+    let dmin = Infinity;
+    for (let a = 0; a < shownS.length; a++) for (let b = a + 1; b < shownS.length; b++) dmin = Math.min(dmin, Math.hypot(shownS[a].sx - shownS[b].sx, shownS[a].sy - shownS[b].sy));
+    // a massif anchor must sit on its crown, not on a subfolder feature
+    const L = world.land, onSub = slips.filter(s => s.kind === "massif").filter(s => { const k = cellIndex(s.x, s.z), f = L.ownerFeat[k]; return f >= 0 && featById[f].kind !== "crown"; }).map(s => s.name);
+    const dup = ids.map((id, j) => ids.indexOf(id) !== j ? [slips[ids.indexOf(id)].name, slips[j].name, id] : null).filter(Boolean);
+    return { unique: !dup.length, dup, shown: shownS.length, minSeparation: Math.round(dmin), massifOnSub: onSub,
+      massifHidden: slips.filter(s => s.kind === "massif" && !s.on).map(s => [s.name, Math.round(s.size), s.why]) };
+  }
+  // Circle around through `deg` degrees in `step` steps at `speed` °/s on the slip clock (no rendering); counts changes
+  function orbitTest({ deg = 90, step = 0.75, speed = 4.5, zoom = 1, centre = null } = {}) {
+    const v0 = orbitView(LAY.AZ);
+    if (zoom !== 1) { v0.dist *= zoom; if (centre) v0.target = new THREE.Vector3(centre[0], HMAX * 0.25, centre[1]); }
+    const tog = new Map(), log = new Map();
+    let t = 1000, vmin = Infinity, vmax = 0;
+    slipEvents.length = 0;
+    for (let k = 0; k * step <= deg + 1e-9; k++) {
+      poseCamera({ ...v0, az: v0.az + k * step * DEG });
+      updateSlips(t, 1, k === 0);
+      for (const s of slips) { if (!log.has(s)) log.set(s, []); log.get(s).push(s.why || "ok"); }
+      const n = slips.filter(s => s.on).length; vmin = Math.min(vmin, n); vmax = Math.max(vmax, n);
+      for (const e of slipEvents.splice(0)) if (k) { if (!tog.has(e.slip)) tog.set(e.slip, []); tog.get(e.slip).push(k); }
+      t += step / speed;
+    }
+    let flicker = 0, worst = 0, soft = 0;
+    const detail = [];
+    tog.forEach((ks, s) => {
+      const lg = log.get(s), win = Math.round(10 / step);
+      flicker += ks.slice(1).filter((k, j) => k - ks[j] < win).length;
+      worst = Math.max(worst, ks.length);
+      let last = 0, ns = 0;
+      for (const k of ks) { if (!lg.slice(last, k + 1).some(x => x === "occ" || x === "frame" || x === "edge")) ns++; last = k; }
+      soft = Math.max(soft, ns);
+      if (ns > 1 || ks.length > 2) {
+        const runs = [];
+        for (const x of lg) { if (runs.length && runs[runs.length - 1][0] === x) runs[runs.length - 1][1]++; else runs.push([x, 1]); }
+        detail.push([s.kind, s.name, ks.map(k => r2(k * step)), runs.map(([x, n]) => x + n).join(" ")]);
+      }
+    });
+    return { frames: Math.floor(deg / step) + 1, flicker, maxToggles: worst, maxSoftToggles: soft, visible: [vmin, vmax], detail };
+  }
+  // every folder's slip shows after flying to it (the selection camera: facing its side of the parent)
+  function flyTest() {
+    const miss = [];
+    let n = 0;
+    for (const s of slips) {
+      if (s.kind === "massif") continue;
+      n++;
+      const f = s.folder.feat || s.folder.band?.f, par = s.folder.feat?.parent;
+      const az0 = s.kind !== "year" && par ? Math.atan2(f.x - par.x, f.z - par.z) : LAY.AZ;
+      let ok = false;
+      for (const daz of [0, 30, -30, 60, -60]) {
+        for (const dist of [320, 220, 150]) {
+          poseCamera({ target: new THREE.Vector3(s.x, s.top * reliefFor(55 * DEG), s.z), dist, polar: 55 * DEG, az: az0 + daz * DEG });
+          updateSlips(0, 1, true);
+          if (s.on) { ok = true; break; }
+        }
+        if (ok) break;
+      }
+      if (!ok) miss.push(`${s.kind}:${s.name}`);
+    }
+    return { nameable: n - miss.length, of: n, miss };
+  }
+  // the selection camera for `count` seeded random notes: polar kept ≥ 45° with the dot visible and in frame
+  function selTest(count = 24) {
+    const out = [];
+    let seed = 3;
+    const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+    const ids = new Set();
+    while (ids.size < Math.min(count, N)) ids.add(Math.floor(rnd() * N));
+    for (const i of ids) {
+      const v = selectionView(i);
+      poseCamera(v);
+      const y = hAt(nodes[i].x, nodes[i].z) * reliefFor(v.polar), [sx, sy, sz] = toScreen(nodes[i].x, y, nodes[i].z);
+      out.push({ i, polar: Math.round(v.polar / DEG), visible: !occluded(nodes[i].x, y, nodes[i].z, camera.position, reliefFor(v.polar)) && sz < 1 && sx > 0 && sx < innerWidth && sy > 0 && sy < innerHeight });
+    }
+    return { ok: out.filter(o => o.polar >= 45 && o.visible).length, of: out.length, polars: [...new Set(out.map(o => o.polar))], bad: out.filter(o => o.polar < 45 || !o.visible) };
+  }
+  // painting order: the host's crown before any near hill; each stratum when its notes were written
+  function revealCheck() {
+    const L = world.land, q = (a, p) => { const s = a.slice().sort((x, y) => x - y); return s.length ? r2(s[Math.floor((s.length - 1) * p)]) : null; };
+    const host = massifsAll[0].feats[0], hostCells = [], near = [];
+    for (let k = 0; k < G2; k++) {
+      if (L.H[k] <= LAND_MIN || L.ownerPlan[k] < 0) continue;
+      if (L.ownerFeat[k] === host.id) hostCells.push(REVEAL[k]);
+      if (massifsAll[L.ownerPlan[k]].band >= 2) near.push(REVEAL[k]);
+    }
+    const bands = allBands.map(B => {
+      const r = [];
+      for (let k = 0; k < G2; k++) if (L.bandOf[k] === B.id) r.push(REVEAL[k]);
+      return [B.folder.chain.slice(1).join("/"), q(r, 0.5), B.f];
+    });
+    // every stack of strata is inked oldest first
+    const stacks = [...new Set(bands.map(b => b[2]))].map(f => bands.filter(b => b[2] === f).map(b => b[1]).filter(v => v !== null));
+    const stacksOrdered = stacks.every(v => v.every((x, j) => !j || x >= v[j - 1]));
+    bands.forEach(b => b.pop());
+    return { stacksOrdered, hostCrownMedian: q(hostCells, 0.5), hostCrown90: q(hostCells, 0.9), nearHillsFirst: q(near, 0), nearHills10: q(near, 0.1), bands };
+  }
+
+  if (debug) window.__dbg = {
+    camera, controls, U, nodes,
+    land: () => world.land,
+    get massifs() { return world.land.massifs.map(m => ({ folder: m.folder, notes: m.notes.length, features: m.tops.length, summit: Math.round(m.summit.h) })); },
+    features: () => featById.map(f => [f.folder.chain.join("/"), f.kind, Math.round(f.h), Math.round(f.w), f.depth, r2(f.x), r2(f.z), f.parent ? f.parent.folder.chain.join("/") : null]),
+    slips: () => slips.map(s => [s.name, s.kind, s.on, s.why, Math.round(s.sx), Math.round(s.sy), Math.round(s.size)]),
+    slipLog: () => slipEvents.map(({ slip, ...e }) => e),
+    composition: compositionInfo, prominence, joins, paper: paperShare, hostCheck, anchors, orbitTest, flyTest, selTest, revealCheck,
+    stats: () => ({ calls: renderer.info.render.calls, triangles: renderer.info.render.triangles }),
+    frameMs: medianFrame,
+    trails: () => world.trailCount,
+    inks: () => folders.map(f => [f, "#" + ink[f].getHexString()]),
+    view: name => { setView(VIEWS[name]()); slipFresh = true; wake(); },
+    go: goView,
+    at: s => { paintAgain(); drawing.frozenAt = s; },
+    az: () => Math.round(currentView().az / DEG),
+    cur: () => { const v = currentView(); return { polar: Math.round(v.polar / DEG), az: Math.round(v.az / DEG), dist: Math.round(v.dist), target: v.target.toArray().map(Math.round) }; },
+    orbit: () => ({ on: viewState.orbit.on, pausedUntil: viewState.orbit.pausedUntil, easing: !!viewState.orbit.ease, active: viewState.active }),
+    state: () => ({ finished: drawing.finished, controls: controls.enabled, selected: ui.selected, focus: document.activeElement.id || document.activeElement.tagName }),
+    ui: () => uiBoxes.map(b => [b.x, b.y, b.w, b.h].map(Math.round)),
+    extent: (budget = 160) => { const pts = framePoints(polarNow(), budget), q = new THREE.Vector3(); let a = [9, -9, 9, -9]; for (const p of pts) { q.copy(p).project(camera); a = [Math.min(a[0], q.x), Math.max(a[1], q.x), Math.min(a[2], q.y), Math.max(a[3], q.y)]; } return { n: pts.length, ext: a.map(r2), rect: frameRect(0.86), aspect: camera.aspect, pa: projCam.aspect }; },
+    slipT: SLIP_T, slipMargin: SLIP_MARGIN,
+    hmax: HMAX, bootMs: Math.round(performance.now() - BOOT0),
+    finish: finishDrawing, paintAgain, select, deselect, pick, toScreen, noteY, occluded, selectionView,
+  };
+}
+</script>
+</body>
+</html>
