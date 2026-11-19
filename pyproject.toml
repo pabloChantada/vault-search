@@ -33,6 +33,9 @@ testpaths = ["tests"]
 
 [dependency-groups]
 dev = [
+<<<<<<< HEAD
     "py-spy>=0.4.3",
+=======
+>>>>>>> a2e38da (merge: fix merge problems)
     "scalene>=2.4.0",
 ]
