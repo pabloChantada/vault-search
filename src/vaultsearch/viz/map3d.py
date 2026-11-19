@@ -16,7 +16,8 @@ import numpy as np
 from ..core.store import Store
 
 log = logging.getLogger("vaultsearch")
-TEMPLATE = Path(__file__).with_name("template.html")
+THEMES_DIR = Path(__file__).with_name("themes")
+DEFAULT_THEME = "sansui"
 
 
 def _pca(x: np.ndarray) -> np.ndarray:
@@ -28,11 +29,15 @@ def _pca(x: np.ndarray) -> np.ndarray:
     return out
 
 
-def project(vectors: np.ndarray, method: str = "auto", seed: int = 42) -> tuple[np.ndarray, str]:
-    """Reduce (n, d) vectors to (n, 3), centred and scaled to [-1, 1]. Returns (coords, method used)."""
+def project(vectors: np.ndarray, method: str = "auto", seed: int = 42, dims: int = 3) -> tuple[np.ndarray, str]:
+    """Reduce (n, d) vectors to (n, dims), centred and scaled to [-1, 1]. Returns (coords, method used).
+
+    Fit 2D and 3D separately rather than dropping an axis: clusters that are apart only in the
+    dropped dimension would otherwise land on top of each other.
+    """
     n = len(vectors)
     if n == 0:
-        return np.zeros((0, 3), dtype=np.float32), method
+        return np.zeros((0, dims), dtype=np.float32), method
     if method in ("auto", "umap"):
         try:
             import umap  # optional: `uv sync --extra viz`
@@ -43,10 +48,10 @@ def project(vectors: np.ndarray, method: str = "auto", seed: int = 42) -> tuple[
         else:
             method = "umap" if n > 15 else "pca"  # UMAP needs more points than neighbours
     if method == "umap":
-        reducer = umap.UMAP(n_components=3, metric="cosine", n_neighbors=15, min_dist=0.1, random_state=seed)
+        reducer = umap.UMAP(n_components=dims, metric="cosine", n_neighbors=15, min_dist=0.1, random_state=seed)
         coords = reducer.fit_transform(vectors)
     else:
-        coords = _pca(vectors)
+        coords = _pca(vectors)[:, :dims]
     coords = coords - coords.mean(axis=0)
     scale = np.abs(coords).max() or 1.0
     return (coords / scale).astype(np.float32), method
@@ -68,7 +73,9 @@ def build_graph(store: Store, method: str = "auto") -> dict[str, Any]:
         vecs.append(m / (np.linalg.norm(m) or 1.0))
         rows.append(f)
 
-    coords, used = project(np.array(vecs, dtype=np.float32).reshape(len(vecs), -1), method)
+    matrix = np.array(vecs, dtype=np.float32).reshape(len(vecs), -1)
+    coords, used = project(matrix, method)
+    coords2, _ = project(matrix, used, dims=2)  # ground plane for flat and landscape themes
 
     # Links point at note titles ([[Kanji]]) or paths ([[Japanese/Kanji]]); resolve both case-insensitively
     index: dict[str, int] = {}
@@ -88,16 +95,27 @@ def build_graph(store: Store, method: str = "auto") -> dict[str, Any]:
             "title": f["title"],
             "folder": _folder(f["path"]),
             "tags": json.loads(f["tags"]),
+            "mtime": f["mtime"],  # last edit: how fresh the ink is
+            "created": f["created"],  # when it was written: height in the tree
             "pos": [round(float(c), 4) for c in xyz],
+            "pos2": [round(float(c), 4) for c in xy],
         }
-        for f, xyz in zip(rows, coords)
+        for f, xyz, xy in zip(rows, coords, coords2)
     ]
     log.info("3D map: %d notes, %d links (%s)", len(nodes), len(edges), used)
     return {"method": used, "nodes": nodes, "links": sorted(edges)}
 
 
-def write_html(graph: dict[str, Any], out: Path, vault_name: str) -> Path:
+def available_themes() -> list[str]:
+    """Each theme is one self-contained HTML page in viz/themes/."""
+    return sorted(p.stem for p in THEMES_DIR.glob("*.html"))
+
+
+def write_html(graph: dict[str, Any], out: Path, vault_name: str, theme: str = DEFAULT_THEME) -> Path:
+    template = THEMES_DIR / f"{theme}.html"
+    if not template.is_file():
+        raise ValueError(f"Unknown theme {theme!r}; available: {', '.join(available_themes())}")
     data = json.dumps({**graph, "vault": vault_name}, ensure_ascii=False).replace("</", "<\\/")
-    html = TEMPLATE.read_text(encoding="utf-8").replace("/*__DATA__*/null", data)
+    html = template.read_text(encoding="utf-8").replace("/*__DATA__*/null", data)
     out.write_text(html, encoding="utf-8")
     return out

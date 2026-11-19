@@ -101,7 +101,12 @@ class Indexer:
             else:
                 to_embed.append(ch)
 
-        record = NoteRecord(rel, st.st_mtime, st.st_size, file_hash, note.title, note.tags, note.links, keep, [])
+        # st_birthtime is the real creation time on Windows/macOS; on Linux st_ctime is the
+        # metadata-change time, so mtime is the honest fallback there. iCloud can reset both.
+        born = getattr(st, "st_birthtime", None) or (st.st_ctime if os.name == "nt" else st.st_mtime)
+        created = note.created or min(born, st.st_mtime)
+        record = NoteRecord(rel, st.st_mtime, st.st_size, file_hash, note.title, note.tags, note.links, keep, [],
+                            created=created)
         return _Pending(record, to_embed, "updated" if prev_hash else "new")
 
     def _flush(self, batch: list[_Pending]) -> None:

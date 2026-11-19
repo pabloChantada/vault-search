@@ -8,6 +8,7 @@ from __future__ import annotations
 import hashlib
 import re
 from dataclasses import dataclass
+from datetime import date, datetime
 
 import frontmatter
 
@@ -34,6 +35,39 @@ class ParsedNote:
     tags: list[str]
     links: list[str]
     chunks: list[Chunk]
+    created: float | None = None  # from the frontmatter or a date in the title; None = unknown
+
+
+CREATED_KEYS = ("created", "date created", "created_at", "creation date", "date")
+DATE_IN_TITLE = re.compile(r"(\d{4})-(\d{2})-(\d{2})")
+
+
+def _to_timestamp(value: object) -> float | None:
+    if isinstance(value, datetime):
+        return value.timestamp()
+    if isinstance(value, date):
+        return datetime(value.year, value.month, value.day).timestamp()
+    if isinstance(value, str):
+        try:
+            return datetime.fromisoformat(value.strip().replace("Z", "+00:00")).timestamp()
+        except ValueError:
+            return None
+    return None
+
+
+def creation_time(meta: dict, title: str) -> float | None:
+    """When the note was written, as far as the note itself says: frontmatter first, then a
+    YYYY-MM-DD in the title (daily notes). Filesystem dates are the caller's fallback."""
+    lowered = {str(k).lower(): v for k, v in meta.items()}
+    for key in CREATED_KEYS:
+        if (ts := _to_timestamp(lowered.get(key))) is not None:
+            return ts
+    if m := DATE_IN_TITLE.search(title):
+        try:
+            return datetime(int(m[1]), int(m[2]), int(m[3])).timestamp()
+        except ValueError:
+            return None
+    return None
 
 
 def _split_long(text: str, max_chars: int) -> list[str]:
@@ -117,4 +151,4 @@ def parse_note(raw: str, title: str, max_chars: int = 1200) -> ParsedNote:
     if not chunks:
         chunks.append(Chunk(ordinal=0, heading=title, text=title))
 
-    return ParsedNote(title=title, tags=sorted(tags), links=links, chunks=chunks)
+    return ParsedNote(title=title, tags=sorted(tags), links=links, chunks=chunks, created=creation_time(meta, title))

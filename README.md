@@ -87,16 +87,22 @@ vaultsearch search "kanji compounds"   # print the top results
 vaultsearch search "habits" --tag reading -n 5
 vaultsearch status                     # index size and recently modified notes
 vaultsearch watch                      # keep the index fresh in the background
-vaultsearch map --open                 # 3D map of the vault in the browser
+vaultsearch map --open                 # map of the vault in the browser (--theme sansui|sumi|yggdrasil)
 ```
 
 `search` updates the index before searching (it's cheap), so results are never stale. Pass `--no-sync` to skip that step.
 
-### 3D map
+### Vault map
 
-`vaultsearch map` writes a single HTML file (three.js, loaded from a CDN) with one point per note. Each note is the mean of its chunk embeddings, projected to 3D, so notes about similar things end up close together. Points are coloured by top-level folder and joined by their `[[links]]`. You can toggle folders, highlight notes by title, and click a point to open the note in Obsidian.
+`vaultsearch map` writes a single HTML page (three.js, loaded from a CDN) that draws your vault. Notes are placed by meaning: each one is the mean of its chunk embeddings, projected with UMAP, so notes about similar things end up together. There are two themes:
 
-The projection uses UMAP (cosine) when `umap-learn` is installed (`uv sync --extra viz`) and PCA otherwise. UMAP keeps local neighbourhoods and gives much clearer clusters; PCA needs no extra dependencies.
+- **`--theme sansui`** (default): the vault painted as a Chinese mountain-and-water landscape (山水). Each mountain is a cluster of related notes, laid out on a 2D UMAP of the embeddings: the more notes a subject has, the higher it stands, and its peaks are your most-linked notes. Mist separates near, middle and far ranges, and ink follows the form of the land (outlines heavier at the base, fine strokes down the slopes). Notes are moss dots, pale when you haven't touched them in a while. Brush-drawn trails join clusters linked by `[[links]]`. On first load the painting draws itself in about 7 seconds, in the order the notes were written. You can switch between four classic viewpoints, from above to a high-distance view. Selecting a note draws its links in vermilion.
+- **`--theme sumi`**: the flat version, the vault as ink on washi paper. Each note is a drop of ink, in a tone for its folder, and the drops fall in the order you wrote them. Fresh notes stay dense; the ones you haven't touched in a while bleed into the paper. `[[links]]` are brush strokes, and the selected note gets a vermilion seal.
+- **`--theme yggdrasil`**: the vault as the world tree, with time running upward. The roots hold your oldest notes and the crown this month's. Each folder is a limb that leaves the trunk when you started it and forks into sub-limbs, one per cluster of related notes. Leaves turn autumnal when you stop editing them. Golden sap runs along your `[[links]]` through the trunk, and Ratatoskr, the messenger squirrel, carries it to each linked note when you select one.
+
+Both have search (`/`), folder toggles, and a panel with the note's links and a button to open it in Obsidian. They respect `prefers-reduced-motion`. When a note was written comes from its frontmatter (`created`, `date`…), a `YYYY-MM-DD` in its title (daily notes), or the file's creation time, in that order.
+
+The projection uses UMAP (cosine) when `umap-learn` is installed (`uv sync --extra viz`) and PCA otherwise. The map is an extra: nothing in it touches the indexer, the TUI or the MCP server.
 
 ---
 

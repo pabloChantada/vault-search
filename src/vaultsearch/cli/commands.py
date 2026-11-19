@@ -175,7 +175,7 @@ def cmd_watch(cfg: Config) -> None:
         engine.stop()
 
 
-def cmd_map(cfg: Config, out: str, method: str, sync: bool, open_browser: bool) -> None:
+def cmd_map(cfg: Config, out: str, method: str, theme: str, sync: bool, open_browser: bool) -> None:
     from pathlib import Path
 
     from ..viz import build_graph, write_html
@@ -185,7 +185,7 @@ def cmd_map(cfg: Config, out: str, method: str, sync: bool, open_browser: bool) 
         _sync_with_progress(engine)
     with err.status(f"[{DIM}]Projecting notes to 3D…[/]", spinner="dots"):
         graph = build_graph(engine.store, method)
-    path = write_html(graph, Path(out).expanduser().resolve(), cfg.vault.name)
+    path = write_html(graph, Path(out).expanduser().resolve(), cfg.vault.name, theme)
     err.print(
         f"[bold {ACCENT}]Map[/] {len(graph['nodes'])} notes · {len(graph['links'])} links "
         f"({graph['method'].upper()}) → [{PATH}]{path}[/]"

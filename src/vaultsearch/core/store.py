@@ -10,7 +10,7 @@ from pathlib import Path
 
 import sqlite_vec
 
-SCHEMA_VERSION = "1"
+SCHEMA_VERSION = "2"  # 2: files.created
 
 
 def _pack(vec: list[float]) -> bytes:
@@ -30,6 +30,7 @@ class NoteRecord:
     links: list[str]
     keep: dict[int, tuple[int, str]]  # chunk_id -> (ordinal, heading) for chunks we keep
     new: list[tuple[int, str, str, str, list[float]]]  # (ordinal, heading, text, hash, embedding)
+    created: float = 0.0  # when the note was written (frontmatter, daily-note title or file birth time)
 
 
 class Store:
@@ -69,7 +70,8 @@ class Store:
                     hash TEXT NOT NULL,
                     title TEXT NOT NULL,
                     tags TEXT NOT NULL DEFAULT '[]',
-                    links TEXT NOT NULL DEFAULT '[]'
+                    links TEXT NOT NULL DEFAULT '[]',
+                    created REAL NOT NULL DEFAULT 0
                 );
                 CREATE TABLE IF NOT EXISTS chunks(
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -119,10 +121,10 @@ class Store:
     def _write_note(self, rec: NoteRecord) -> None:
         path, title, keep = rec.path, rec.title, rec.keep
         self.db.execute(
-            """INSERT INTO files(path, mtime, size, hash, title, tags, links) VALUES (?,?,?,?,?,?,?)
-               ON CONFLICT(path) DO UPDATE SET mtime=excluded.mtime, size=excluded.size,
-               hash=excluded.hash, title=excluded.title, tags=excluded.tags, links=excluded.links""",
-            (path, rec.mtime, rec.size, rec.file_hash, title, json.dumps(rec.tags), json.dumps(rec.links)),
+            """INSERT INTO files(path, mtime, size, hash, title, tags, links, created) VALUES (?,?,?,?,?,?,?,?)
+               ON CONFLICT(path) DO UPDATE SET mtime=excluded.mtime, size=excluded.size, hash=excluded.hash,
+               title=excluded.title, tags=excluded.tags, links=excluded.links, created=excluded.created""",
+            (path, rec.mtime, rec.size, rec.file_hash, title, json.dumps(rec.tags), json.dumps(rec.links), rec.created),
         )
         old_ids = [r["id"] for r in self.db.execute("SELECT id FROM chunks WHERE path=?", (path,))]
         for cid in old_ids:
@@ -227,7 +229,7 @@ class Store:
     def note_embeddings(self) -> tuple[list[sqlite3.Row], dict[str, list[bytes]]]:
         """All notes plus their chunks' packed float32 embeddings, grouped by note path."""
         with self.lock:
-            files = self.db.execute("SELECT path, title, tags, links FROM files ORDER BY path").fetchall()
+            files = self.db.execute("SELECT path, title, tags, links, mtime, created FROM files ORDER BY path").fetchall()
             paths = {r["id"]: r["path"] for r in self.db.execute("SELECT id, path FROM chunks")}
             vecs: dict[str, list[bytes]] = {}
             for r in self.db.execute("SELECT rowid, embedding FROM vec_chunks"):
