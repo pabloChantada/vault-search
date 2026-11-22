@@ -3421,7 +3421,10 @@ viz = [
 
 [package.dev-dependencies]
 dev = [
+<<<<<<< HEAD
     { name = "py-spy" },
+=======
+>>>>>>> a2e38da (merge: fix merge problems)
     { name = "scalene" },
 ]
 
@@ -3440,10 +3443,14 @@ requires-dist = [
 provides-extras = ["dev", "viz"]
 
 [package.metadata.requires-dev]
+<<<<<<< HEAD
 dev = [
     { name = "py-spy", specifier = ">=0.4.3" },
     { name = "scalene", specifier = ">=2.4.0" },
 ]
+=======
+dev = [{ name = "scalene", specifier = ">=2.4.0" }]
+>>>>>>> a2e38da (merge: fix merge problems)
 
 [[package]]
 name = "watchdog"
