@@ -194,7 +194,6 @@ uv run scalene run scripts/bench_index.py --- --vault "<path>"   # Python vs nat
 sudo uv run py-spy record -o index.svg -- python scripts/bench_index.py --vault "<path>"   # flame graph
 ```
 
-<<<<<<< HEAD
 Flags `--embed-batch`, `--index-batch` and `--threads` override the config for a run.
 
 #### Results
@@ -220,8 +219,6 @@ What it shows:
 
 Further speed-ups (an int8-quantised model, shorter chunks, multi-process `parallel=`, GPU) would each cost retrieval quality, RAM or a heavy dependency. For an index that is built once and then updated incrementally, that isn't worth it.
 
-=======
->>>>>>> a2e38da (merge: fix merge problems)
 ## Known limitations
 
 - **Keyword search and Japanese.** SQLite's tokenizer splits on spaces, and Japanese doesn't use them, so Japanese queries rely on the semantic side of the search. That works well, but exact-match keyword hits won't show up. A trigram index would fix it.
