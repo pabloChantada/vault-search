@@ -26,13 +26,15 @@ def build_parser() -> argparse.ArgumentParser:
     sub.add_parser("status", help="Index summary and recently modified notes")
     sub.add_parser("watch", help="Index and keep watching for changes (no MCP)")
     mp = sub.add_parser("map", help="Export a 3D map of the vault (UMAP/PCA → three.js HTML)")
-    mp.add_argument("-o", "--out", default="vault-map.html", help="Output HTML file (default vault-map.html)")
+    mp.add_argument("-o", "--out", default=None,
+                    help="Output HTML file (default vault-map.html, or next to the index with --open)")
     mp.add_argument("--method", choices=["auto", "umap", "pca"], default="auto",
                     help="auto = UMAP if umap-learn is installed, else PCA")
     mp.add_argument("--no-sync", action="store_true", help="Don't update the index first")
     mp.add_argument("--theme", choices=["sansui", "yggdrasil"], default="sansui",
                     help="sansui = 3D ink landscape; yggdrasil = a tree that grows with time")
-    mp.add_argument("--open", action="store_true", help="Open the map in the browser")
+    mp.add_argument("--open", action="store_true",
+                    help="Open the map in a window of its own (a browser tab if no Chromium browser is found)")
     sub.add_parser("serve", help="MCP server over stdio (launched by Claude Desktop)")
     return ap
 

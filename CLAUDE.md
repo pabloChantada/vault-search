@@ -5,7 +5,8 @@ Hybrid search over an Obsidian vault (the owner's "SecondBrain", stored in iClou
 ## Layout
 
 - `src/vaultsearch/core/`: the engine, with no UI code. `Engine` (engine.py) wires `Config`, the embedder, `Store`, `Indexer`, `Searcher` and `VaultWatcher` together.
-- `src/vaultsearch/tui/`: the Textual app. Styles live in `styles.tcss`; keep the colours in sync with `theme.py`.
+- `src/vaultsearch/tui/`: the Textual app. Its palette is the map's (washi paper, sumi ink, vermilion seal): `theme.py` holds the hex values, `tui/themes.py` turns them into the `washi` and `yoru` Textual themes, and `styles.tcss` only uses their variables (`$ink`, `$ash`, `$ai`, `$seal`, `$paper`...).
+- `src/vaultsearch/viz/`: the 3D map. `window.py` opens it in a Chromium app-mode window (Edge on Windows), falling back to the browser.
 - `src/vaultsearch/cli/`: `main.py` holds argparse and dispatch; `commands.py` holds the Rich output.
 - `src/vaultsearch/mcp_server/`: the MCP tools. It works with mcp 1.x (`FastMCP`) and 2.x (`MCPServer`).
 
