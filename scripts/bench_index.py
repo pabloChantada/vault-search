@@ -66,11 +66,7 @@ def _instrument(indexer: Indexer, timer: PhaseTimer, counters: dict[str, int]) -
         return embed(texts)
 
     indexer.embedder.embed = timer.wrap("embed", counting_embed)  # type: ignore[method-assign]
-<<<<<<< HEAD
     indexer.store.write_notes = timer.wrap("sqlite write", indexer.store.write_notes)  # type: ignore[method-assign]
-=======
-    indexer.store.write_note = timer.wrap("sqlite write", indexer.store.write_note)  # type: ignore[method-assign]
->>>>>>> a2e38da (merge: fix merge problems)
     indexer_mod.parse_note = timer.wrap("parse + chunk", indexer_mod.parse_note)
 
 
@@ -85,11 +81,7 @@ def _run_sync(indexer: Indexer) -> tuple[float, PhaseTimer, dict[str, int], dict
     finally:
         # Undo the patches so a second run measures from a clean slate
         indexer_mod.parse_note = original_parse
-<<<<<<< HEAD
         for obj, attr in ((indexer, "iter_notes"), (indexer.embedder, "embed"), (indexer.store, "write_notes")):
-=======
-        for obj, attr in ((indexer, "iter_notes"), (indexer.embedder, "embed"), (indexer.store, "write_note")):
->>>>>>> a2e38da (merge: fix merge problems)
             obj.__dict__.pop(attr, None)
     return total, timer, dict(counters), counts
 
@@ -105,11 +97,7 @@ def _phase_report(total: float, timer: PhaseTimer) -> list[dict[str, Any]]:
 def benchmark(cfg: Config) -> dict[str, Any]:
     """Load the model, index the vault from scratch, then run a warm (no-op) sync."""
     t0 = time.perf_counter()
-<<<<<<< HEAD
     embedder = make_embedder(cfg.embedder, cfg.embed_model, cfg.embed_batch_size, cfg.embed_threads)
-=======
-    embedder = make_embedder(cfg.embedder, cfg.embed_model)
->>>>>>> a2e38da (merge: fix merge problems)
     load_s = time.perf_counter() - t0
 
     model_id = cfg.embed_model if cfg.embedder == "fastembed" else cfg.embedder
@@ -125,12 +113,9 @@ def benchmark(cfg: Config) -> dict[str, Any]:
     return {
         "vault": str(cfg.vault),
         "embedder": model_id,
-<<<<<<< HEAD
         "embed_batch_size": cfg.embed_batch_size,
         "embed_threads": cfg.embed_threads,
         "index_batch_chunks": cfg.index_batch_chunks,
-=======
->>>>>>> a2e38da (merge: fix merge problems)
         "model_load_s": load_s,
         "notes": stats["notes"],
         "chunks": stats["chunks"],
@@ -153,14 +138,10 @@ def _print_report(res: dict[str, Any]) -> None:
     con = Console(stderr=True)  # stdout stays free for --json
     cold, warm = res["cold"], res["warm"]
     con.print(f"[bold]Vault[/] {res['vault']}")
-<<<<<<< HEAD
     con.print(
         f"[bold]Embedder[/] {res['embedder']} (load {res['model_load_s']:.2f} s, "
         f"ONNX batch {res['embed_batch_size']}, {res['embed_threads'] or 'default'} threads, index batch {res['index_batch_chunks']} chunks)"
     )
-=======
-    con.print(f"[bold]Embedder[/] {res['embedder']} (load {res['model_load_s']:.2f} s)")
->>>>>>> a2e38da (merge: fix merge problems)
     con.print(
         f"[bold]Cold build[/] {res['notes']} notes, {res['chunks']} chunks in {cold['seconds']:.2f} s "
         f"→ {cold['notes_per_s']:.1f} notes/s, {cold['chunks_per_s']:.1f} chunks/s"
@@ -184,12 +165,9 @@ def main(argv: list[str] | None = None) -> None:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--vault", help="Vault path (or the VAULT_PATH env var)")
     ap.add_argument("--embedder", choices=["fastembed", "hash"], help="Override VAULTSEARCH_EMBEDDER")
-<<<<<<< HEAD
     ap.add_argument("--embed-batch", type=int, help="Texts per ONNX run (VAULTSEARCH_EMBED_BATCH)")
     ap.add_argument("--threads", type=int, help="ONNX intra-op threads (VAULTSEARCH_EMBED_THREADS)")
     ap.add_argument("--index-batch", type=int, help="Chunks gathered across notes per embed call (VAULTSEARCH_INDEX_BATCH)")
-=======
->>>>>>> a2e38da (merge: fix merge problems)
     ap.add_argument("--json", action="store_true", help="Also print the raw results as JSON on stdout")
     args = ap.parse_args(argv)
 
@@ -200,15 +178,12 @@ def main(argv: list[str] | None = None) -> None:
         cfg = Config.from_env(args.vault, db=str(Path(tmp) / "bench.db"))
         if args.embedder:
             cfg = replace(cfg, embedder=args.embedder)
-<<<<<<< HEAD
         if args.embed_batch:
             cfg = replace(cfg, embed_batch_size=args.embed_batch)
         if args.threads:
             cfg = replace(cfg, embed_threads=args.threads)
         if args.index_batch:
             cfg = replace(cfg, index_batch_chunks=args.index_batch)
-=======
->>>>>>> a2e38da (merge: fix merge problems)
         res = benchmark(cfg)
 
     _print_report(res)
