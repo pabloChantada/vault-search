@@ -175,22 +175,24 @@ def cmd_watch(cfg: Config) -> None:
         engine.stop()
 
 
-def cmd_map(cfg: Config, out: str, method: str, theme: str, sync: bool, open_browser: bool) -> None:
+def cmd_map(cfg: Config, out: str | None, method: str, theme: str, sync: bool, open_browser: bool) -> None:
     from pathlib import Path
 
-    from ..viz import build_graph, write_html
+    from ..viz import build_graph, map_page, open_window, window_profile, write_html
 
     engine = _open_engine(cfg)
     if sync:
         _sync_with_progress(engine)
     with err.status(f"[{DIM}]Projecting notes to 3D…[/]", spinner="dots"):
         graph = build_graph(engine.store, method)
-    path = write_html(graph, Path(out).expanduser().resolve(), cfg.vault.name, theme)
+    if out:
+        target = Path(out).expanduser().resolve()
+    else:  # a map only meant to be looked at goes next to the index, not into the working directory
+        target = map_page(cfg.db_path) if open_browser else Path("vault-map.html").resolve()
+    path = write_html(graph, target, cfg.vault.name, theme)
     err.print(
         f"[bold {ACCENT}]Map[/] {len(graph['nodes'])} notes · {len(graph['links'])} links "
         f"({graph['method'].upper()}) → [{PATH}]{path}[/]"
     )
     if open_browser:
-        import webbrowser
-
-        webbrowser.open(path.as_uri())
+        open_window(path, window_profile(cfg.db_path))

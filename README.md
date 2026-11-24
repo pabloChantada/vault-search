@@ -18,13 +18,15 @@ Everything runs **locally**, at the moment I don't plan to implement any type of
 
 ## Example
 
-Results update as you type. Each result shows the note, the section it came from and a snippet with your words highlighted. Move through them with the arrow keys and the preview on the right follows, scrolled to the matching section.
+The TUI wears the same ink-on-paper palette as the [vault map](#vault-map): washi paper, sumi ink, and one vermilion seal that marks where you are (the focused pane, the cursor, the words that matched). The seal in the top right corner turns grey while the index is being updated. `ctrl+p` → *Night colours* swaps to paper-on-ink for dark rooms.
 
-Press `Enter` and the note opens in Obsidian. Press `e` to open it in your editor instead (default for the terminal - *TBC*), or `y` to copy its path.
+Results update as you type. Each result shows the note, the folder and section it came from, and a line with your words in vermilion. Move through them with `j`/`k` (or the arrows) and the note on the right follows, scrolled to the matching section. Press `l` to step into the note and read it like a pager in Vim; `h` brings you back.
 
-Every time you save a note in Obsidian, the *watcher* panel at the bottom shows it being re-indexed a couple of seconds later. You never have to index the vault yourself.
+Press `Enter` and the note opens in Obsidian. Press `e` to open it in your editor instead (default for the terminal - *TBC*), or `y` to copy its path. `m` opens the 3D map in a window of its own.
 
-Type `/` for commands:
+Every time you save a note in Obsidian, the status line flashes it being re-indexed a couple of seconds later (`ctrl+p` → *Activity* shows the whole log). You never have to index the vault yourself.
+
+`?` shows every key on one sheet. `ctrl+p` lists the commands, and the ones that need a word can also be typed with a `/`:
 
 ![slash commands](docs/images/tui-commands.png)
 
@@ -34,17 +36,26 @@ Type `/` for commands:
 
 ### Keys
 
-| Key                       | What it does                              |
-| ------------------------- | ----------------------------------------- |
-| type                      | search (live)                             |
-| `↓` / `Enter`        | jump from the prompt to the results       |
-| `↑` `↓`             | move through results, the preview follows |
-| `Enter`, `o` or click | open the note in Obsidian                 |
-| `e`                     | open the note in your default editor      |
-| `y`                     | copy the note's full path                 |
-| `/` or `Esc`          | back to the prompt                        |
-| `F1`                    | help                                      |
-| `Ctrl+Q`                | quit                                      |
+| Where    | Key                     | What it does                          |
+| -------- | ----------------------- | ------------------------------------- |
+| search   | type                    | search as you go                      |
+|          | `Enter` / `↓`           | go to the results                     |
+| results  | `j` `k` / `↑` `↓`       | next, previous result (the note follows) |
+|          | `l` / `Tab`             | read the note                         |
+|          | `Enter`, `o` or click   | open in Obsidian                      |
+|          | `e`                     | open in your default editor           |
+|          | `y`                     | copy the note's full path             |
+| note     | `j` `k`                 | scroll a line (the mouse wheel works too) |
+|          | `Ctrl+D` `Ctrl+U`       | half a page down, up                  |
+|          | `Space` `b`             | a page down, up                       |
+|          | `g` `G`                 | top, bottom                           |
+|          | `]` `[`                 | next, previous heading                |
+|          | `h` / `Esc`             | back to the results                   |
+| anywhere | `/` or `Esc`            | back to the search box                |
+|          | `m`                     | open the 3D map                       |
+|          | `Ctrl+P`                | commands                              |
+|          | `?` / `F1`              | all the shortcuts                     |
+|          | `Ctrl+Q`                | quit                                  |
 
 ---
 
@@ -87,7 +98,7 @@ vaultsearch search "kanji compounds"   # print the top results
 vaultsearch search "habits" --tag reading -n 5
 vaultsearch status                     # index size and recently modified notes
 vaultsearch watch                      # keep the index fresh in the background
-vaultsearch map --open                 # map of the vault in the browser (--theme sansui|yggdrasil)
+vaultsearch map --open                 # map of the vault in its own window (--theme sansui|yggdrasil)
 ```
 
 `search` updates the index before searching (it's cheap), so results are never stale. Pass `--no-sync` to skip that step.
@@ -101,7 +112,9 @@ vaultsearch map --open                 # map of the vault in the browser (--them
 
 Both have search (`/`), folder toggles, and a panel with the note's links and a button to open it in Obsidian. They respect `prefers-reduced-motion`. When a note was written comes from its frontmatter (`created`, `date`…), a `YYYY-MM-DD` in its title (daily notes), or the file's creation time, in that order.
 
-The projection uses UMAP (cosine) when `umap-learn` is installed (`uv sync --extra viz`) and PCA otherwise. The map is an extra: nothing in it touches the indexer, the TUI or the MCP server.
+The projection uses UMAP (cosine) when `umap-learn` is installed (`uv sync --extra viz`) and PCA otherwise. The map is an extra: nothing in it touches the indexer or the MCP server.
+
+`m` in the TUI (or `map --open`) draws the map next to the index in `~/.vaultsearch/` and shows it in a window of its own: a Chromium browser in app mode (`--app`), with no tabs or address bar and its own small profile, so it doesn't land as a tab in your browser. Edge ships with Windows, so the window is always there; on macOS and Linux it uses Chrome, Chromium, Brave or Edge if one is installed, and falls back to your default browser if none is. Without `--open`, `map` writes `vault-map.html` in the current folder, as before.
 
 ---
 

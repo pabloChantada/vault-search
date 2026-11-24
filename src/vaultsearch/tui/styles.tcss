@@ -1,98 +1,191 @@
-/* vaultsearch TUI — dark terminal theme (keep in sync with vaultsearch/theme.py) */
-$vs-accent: #7DD3C0;
-$vs-path: #F2B66D;
-$vs-dim: #9AA0A6;
-$vs-bg: #0F1115;
-$vs-panel: #161920;
-$vs-line: #262A33;
-$vs-line-strong: #3A3F4B;
-$vs-selected: #1C2029;
+/* vaultsearch TUI: ink on washi paper, like the 3D map.
+   Colours come from the Textual themes in themes.py (palette in vaultsearch/theme.py):
+   $ink text, $ash diluted ink, $ai indigo, $moss green, $seal vermilion, $paper, $paper-deep.
+   The seal colour only ever marks where you are: the focused pane, the cursor, matched words. */
 
 Screen {
-    background: $vs-bg;
-    color: #E6E6E3;
+    background: $paper;
+    color: $ink;
+    padding: 1 2 0 2;
 }
 
-#header {
-    border: round $vs-accent;
-    padding: 0 2;
-    height: auto;
-    width: auto;
-    max-width: 100%;
-    margin: 0 1;
-}
-
-#main {
-    height: 1fr;
-    margin: 0 1;
-}
-
-#results {
-    width: 45%;
-    border: round $vs-line;
-    background: $vs-bg;
-}
-
-#results:focus-within {
-    border: round $vs-accent;
-}
-
-#results ListItem {
-    padding: 0 1;
+/* ---------- brand line: name, vault, and the seal that shows the index state ---------- */
+#brand {
+    height: 1;
     margin-bottom: 1;
-    background: $vs-bg;
 }
 
-#results ListItem.-highlight {
-    background: $vs-selected;
+#title {
+    width: 1fr;
 }
 
-.r-body {
-    padding-left: 4;
+#seal {
+    width: auto;
+    background: $seal;
+    color: $paper;
+    text-style: bold;
 }
 
-.r-meta {
-    padding-left: 4;
-    color: $vs-dim;
+#seal.busy {
+    background: $ash;
 }
 
-#preview-wrap {
-    width: 55%;
-    border: round $vs-line;
-    padding: 0 1;
-}
-
-#preview-wrap:focus-within {
-    border: round $vs-accent;
-}
-
-#preview {
-    background: $vs-bg;
-}
-
-#events {
-    height: 5;
-    margin: 0 1;
-    border: round $vs-line;
-    background: $vs-bg;
-}
-
+/* ---------- search ---------- */
 #prompt {
-    margin: 0 1;
-    border: round $vs-line-strong;
-    background: $vs-bg;
+    height: 2;
+    padding: 0;
+    border: none;
+    border-bottom: hkey $ash;
+    background: $paper;
+    background-tint: $paper 0%;
+    color: $ink;
 }
 
 #prompt:focus {
-    border: round $vs-accent;
+    background-tint: $paper 0%;
+    border: none;
+    border-bottom: hkey $seal;
+}
+
+#prompt > .input--placeholder,
+#prompt > .input--suggestion {
+    color: $ash;
+}
+
+#scope {
+    height: 1;
+    margin-top: 1;
+}
+
+/* ---------- results | note ---------- */
+#main {
+    height: 1fr;
+    margin-top: 1;
+}
+
+#results {
+    width: 2fr;
+    min-width: 30;
+    max-width: 64;
+    background: $paper;
+    border-left: blank;
+    padding-right: 2;
+}
+
+#results:focus {
+    border-left: outer $seal;
+}
+
+#results > ListItem {
+    padding: 0 1;
+    margin-bottom: 1;
+    background: $paper;
+}
+
+#results > ListItem.-highlight {
+    background: $paper-deep;
+}
+
+#results:focus > ListItem.-highlight .r-head {
+    text-style: underline;
+}
+
+.r-body {
+    color: $ash;
+    max-height: 2;
+    text-overflow: ellipsis;
+}
+
+#note {
+    width: 3fr;
+    padding: 0 2;
+    border-left: vkey $paper-deep;
+    background: $paper;
+    scrollbar-size-vertical: 1;
+}
+
+#note:focus {
+    border-left: outer $seal;
+}
+
+#preview {
+    background: $paper;
+    padding: 0;
+    margin: 0;
+}
+
+#preview MarkdownH1 {
+    content-align: left top;
+    text-align: left;
+    border-bottom: hkey $paper-deep;
+    padding: 0;
+    margin: 0 0 1 0;
+}
+
+/* ---------- status line ---------- */
+#statusbar {
+    height: 1;
+    margin-top: 1;
 }
 
 #status {
-    height: 1;
-    margin: 0 2;
-    color: $vs-dim;
+    width: 1fr;
 }
 
-Footer {
-    background: $vs-panel;
+#keys {
+    width: auto;
+}
+
+/* ---------- pop-ups ---------- */
+ShortcutsScreen, ActivityScreen {
+    align: center middle;
+    background: $paper 60%;
+}
+
+#sheet {
+    width: 96;
+    max-width: 100%;
+    height: auto;
+    max-height: 90%;
+    padding: 1 3;
+    background: $paper;
+    border: solid $ink;
+}
+
+#sheet.activity {
+    height: 80%;
+}
+
+.sheet-title {
+    margin-bottom: 1;
+}
+
+#sheet-grid {
+    grid-size: 2;
+    grid-gutter: 1 4;
+    height: auto;
+}
+
+.sheet-section {
+    height: auto;
+}
+
+.sheet-hint {
+    margin-top: 1;
+}
+
+#activity-log {
+    height: 1fr;
+    background: $paper;
+    color: $ink;
+}
+
+/* ---------- Textual's own pop-ups ---------- */
+CommandPalette > Vertical {
+    background: $paper;
+}
+
+Toast {
+    background: $paper-deep;
+    color: $ink;
 }
