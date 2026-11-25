@@ -2,7 +2,6 @@
 import asyncio
 
 import pytest
-from textual.content import Content
 
 from vaultsearch.core import Config
 from vaultsearch.tui.app import VaultSearchApp
@@ -186,7 +185,35 @@ def test_tui_shortcuts_and_short_palette(cfg):
 
 def test_mark_words_keeps_the_text_and_marks_every_match():
     text = "see [[Kanji]] and [b]this[/b] for Rain or rain"
-    content = Content.from_markup(mark_words(text, ["rain"]))
+    content = mark_words(text, ["rain"])
     assert content.plain == text  # brackets in the note are text, not markup
     marked = [content.plain[s.start:s.end] for s in content.spans]
     assert marked == ["Rain", "rain"]
+
+
+def test_mark_words_inside_wikilink_brackets():
+    # The words of a [[link]] used to split its brackets off into markup Textual could not parse
+    content = mark_words("See [[Kanji]] again", ["kanji"])
+    assert content.plain == "See [[Kanji]] again"
+    assert [content.plain[s.start:s.end] for s in content.spans] == ["Kanji"]
+
+
+def test_the_note_follows_the_new_results_not_the_old_ones(cfg):
+    # Replacing the results used to let the old list announce its first item afterwards,
+    # so the reader showed a note from the previous search
+    async def scenario():
+        app = VaultSearchApp(cfg)
+        async with app.run_test(size=(120, 30)) as pilot:
+            await _ready(app, pilot)
+            await pilot.press(*"weather")
+            await pilot.pause(0.8)
+            results = app.query_one("#results", ResultList)
+            assert results.children[0].path == "Long.md"
+            await pilot.press("ctrl+a", "backspace", *"rain")
+            await pilot.pause(1.0)
+            first = results.children[0].path
+            assert first != "Long.md"
+            assert app.query_one("#note", NoteView)._source[1] == cfg.vault / first
+            await pilot.press("ctrl+q")
+
+    asyncio.run(scenario())
