@@ -149,7 +149,7 @@ def _href_target(href: str, note: Path | None, files: VaultFiles | None) -> Targ
 
 # ---------- rendering ----------
 class _Heading(Heading):
-    """Headings set flush left, the top one ruled underneath like the old reader."""
+    """Headings set flush left, the top one ruled underneath."""
 
     LEVEL_ALIGN = dict.fromkeys(("h1", "h2", "h3", "h4", "h5", "h6"), "left")
 
