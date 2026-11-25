@@ -18,7 +18,8 @@ Hybrid search over an Obsidian vault (the owner's "SecondBrain", stored in iClou
 - Search runs BM25 and KNN, fuses them with RRF (k=60) and keeps at most 2 chunks per note. KNN doesn't query sqlite-vec: `core/vectors.py` holds every embedding in a numpy matrix, loaded by `Engine.open` and updated by each `Store` write (a rolled-back transaction drops it, and the next search reloads it). Measure search with `scripts/bench_search.py`.
 - The watcher debounces for 2 s and also runs a full rescan every 10 min, because iCloud drops events.
 - The map's positions are cached in `{db}-layout.json`, keyed by `Store.embedding_fingerprint()`. The TUI warms it in a background thread after the first sync. A refit is seeded with the old layout and Procrustes-aligned to it, so notes keep their place.
-- Embeddings use fastembed `paraphrase-multilingual-MiniLM-L12-v2` (384 dims, ONNX on CPU).
+- Embeddings use `paraphrase-multilingual-MiniLM-L12-v2` (384 dims, ONNX on CPU). fastembed only downloads it: once it's cached, `OnnxEmbedder` runs it with onnxruntime + tokenizers (importing fastembed costs ~1.7 s). Its pipeline must stay identical to fastembed's (`test_onnx_embedder_gives_fastembeds_vectors` checks it when the model is cached).
+- Startup is part of the speed budget. `core/engine.py` imports the heavy modules inside `Engine.open`, so the TUI draws first (`test_startup.py` guards it). `open` opens an existing index before the model loads (`keywords_ready`), so keyword search works ~1 s before hybrid search (`ready`).
 
 ## Rules
 

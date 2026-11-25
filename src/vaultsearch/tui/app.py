@@ -12,6 +12,7 @@ import webbrowser
 from collections import deque
 from collections.abc import Iterable
 from datetime import datetime
+from typing import TYPE_CHECKING
 from urllib.parse import quote
 
 from textual import on, work
@@ -25,7 +26,7 @@ from textual.suggester import SuggestFromList
 from textual.timer import Timer
 from textual.widgets import Input, ListItem, Static
 
-from ..core import Config, Engine, Hit
+from ..core import Config, Engine
 from ..core.links import VaultFiles
 from ..core.text import query_words, snippet
 from .help import COMMANDS, WELCOME_MD
@@ -33,6 +34,9 @@ from .images import ImageScreen
 from .screens import ActivityScreen, ShortcutsScreen
 from .themes import NIGHT_THEME, PAPER_THEME, THEMES
 from .widgets import CommandItem, NoteView, ResultItem, ResultList, mark_words
+
+if TYPE_CHECKING:
+    from ..core.search import Hit
 
 # Keys that are also letters: they must type into the search box, not act, while it has focus
 _LETTER_ACTIONS = {"open_selected", "copy_path", "map", "shortcuts"}
@@ -142,6 +146,9 @@ class VaultSearchApp(App):
             self.state = f"error: {e}"
             self.call_from_thread(self.log_event, logging.ERROR, f"Startup failed: {e}")
             return
+        if self._last_query:
+            # Typed while the model loaded: those results were keyword-only, now they can be hybrid
+            self.call_from_thread(self.run_search, self._last_query)
         self.engine.start_watching()
         self.state = "indexing"
         t0 = time.perf_counter()
@@ -298,14 +305,16 @@ class VaultSearchApp(App):
     @work(thread=True, exclusive=True, group="search")
     def run_search(self, query: str) -> None:
         self._last_query = query
-        if not self.engine.ready.wait(0.05):
-            self.summary = "waiting for the model…"
-            return  # boot() re-runs the last query once it's ready
+        if not self.engine.keywords_ready.wait(0.05):
+            self.summary = "opening the index…"
+            return  # boot() re-runs the last query once it can
+        searcher = self.engine.searcher
+        semantic = searcher.semantic
         t0 = time.perf_counter()
-        hits = self.engine.searcher.search(query, limit=30, folder=self.folder, tag=self.tag)
-        self.call_from_thread(self._show_hits, query, hits, (time.perf_counter() - t0) * 1000)
+        hits = searcher.search(query, limit=30, folder=self.folder, tag=self.tag)
+        self.call_from_thread(self._show_hits, query, hits, (time.perf_counter() - t0) * 1000, semantic)
 
-    def _show_hits(self, query: str, hits: list[Hit], ms: float) -> None:
+    def _show_hits(self, query: str, hits: list[Hit], ms: float, semantic: bool = True) -> None:
         if query != self._last_query:
             return  # a newer query is on its way
         words = query_words(query)
@@ -313,7 +322,10 @@ class VaultSearchApp(App):
         for h in hits:
             heading = h.heading if h.heading != h.title else ""
             items.append(ResultItem(h.path, heading, mark_words(snippet(h.text, words, 160), words)))
-        self._fill_results(items, f"{len(hits)} result{'s' * (len(hits) != 1)}, {ms:.0f} ms")
+        summary = f"{len(hits)} result{'s' * (len(hits) != 1)}, {ms:.0f} ms"
+        if not semantic:
+            summary += ", keywords only while the model loads"
+        self._fill_results(items, summary)
         if not hits:
             self.query_one("#note", NoteView).show_text(
                 f"Nothing matches **{query}**. Try other words, or `/folder off` if a folder filter is on.")

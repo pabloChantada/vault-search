@@ -77,6 +77,25 @@ class Store:
                 self._vectors = None
                 raise
 
+    @staticmethod
+    def existing_dim(db_path: Path, model_id: str) -> int | None:
+        """The vector size of the index at `db_path`, if there is one this version and this
+        model can use as it is (opening it then rebuilds nothing). Reads without writing."""
+        if not db_path.is_file():
+            return None
+        try:
+            db = sqlite3.connect(f"file:{db_path.as_posix()}?mode=ro", uri=True)
+            try:
+                meta = dict(db.execute("SELECT key, value FROM meta").fetchall())
+            finally:
+                db.close()
+        except sqlite3.Error:
+            return None
+        if meta.get("schema") != SCHEMA_VERSION or meta.get("model") != model_id:
+            return None
+        dim = meta.get("dim", "")
+        return int(dim) if dim.isdigit() else None
+
     # ---------- schema ----------
     def _init_schema(self, model_id: str) -> None:
         with self.lock, self.db:

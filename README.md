@@ -175,7 +175,7 @@ A few decisions worth explaining:
 - **Vectors are searched in memory.** sqlite-vec stores the embeddings, but searching them there meant a ~12 ms scan per query. On startup they're loaded into one normalised numpy matrix, kept in step with every write, so a search is a single matrix-vector product: exact, and ~0.5 ms for 6,500 chunks. An approximate index (IVF, HNSW) would only pay off at around 100k chunks.
 - **The index lives outside the vault** (`~/.vaultsearch/`). If your vault syncs through iCloud or OneDrive, a database file inside it would get synced mid-write and eventually corrupted.
 - **A safety-net rescan.** Cloud-synced folders don't always fire file events reliably, so the watcher also does a cheap full rescan every 10 minutes. It only compares modification times, so it costs almost nothing.
-- **Local, multilingual embeddings.** The default model (`paraphrase-multilingual-MiniLM-L12-v2`, via ONNX) handles English, Spanish, Japanese and dozens more, runs on CPU and needs no API key.
+- **Local, multilingual embeddings.** The default model (`paraphrase-multilingual-MiniLM-L12-v2`, via ONNX) handles English, Spanish, Japanese and dozens more, runs on CPU and needs no API key. fastembed downloads it once; after that it runs straight on onnxruntime, which halves the time to load it.
 
 ---
 
@@ -246,19 +246,34 @@ uv run python scripts/bench_search.py --vault "<path>"            # add --json f
 
 Same vault and laptop, 14 queries × 30 runs, 30 results each (what the TUI asks for):
 
-| phase                | sqlite-vec KNN, p50 / p95 | in-memory KNN, p50 / p95 |
-| -------------------- | ------------------------: | -----------------------: |
-| embed the query      | 4.0 / 6.5 ms              | 3.8 / 6.5 ms             |
-| BM25 (FTS5)          | 0.5 / 40.7 ms             | 0.5 / 41.5 ms            |
-| KNN                  | 12.4 / 13.0 ms            | **0.5 / 0.7 ms**         |
-| fetch rows + fuse    | 0.9 / 1.5 ms              | 1.0 / 1.6 ms             |
-| **total**            | **18.1 / 61.7 ms**        | **6.0 / 50.1 ms**        |
+| phase (p50 / p95, ms) | sqlite-vec KNN | in-memory KNN | + common words left out of BM25 |
+| --------------------- | -------------: | ------------: | ------------------------------: |
+| embed the query       | 4.0 / 6.5      | 3.8 / 6.5     | 3.9 / 6.2                       |
+| BM25 (FTS5)           | 0.5 / 40.7     | 0.5 / 41.5    | **0.5 / 4.9**                   |
+| KNN                   | 12.4 / 13.0    | **0.5 / 0.7** | 0.5 / 0.7                       |
+| fetch rows + fuse     | 0.9 / 1.5      | 1.0 / 1.6     | 1.1 / 1.7                       |
+| **total**             | **18.1 / 61.7**| **6.0 / 50.1**| **6.2 / 12.2**                  |
 
 What it shows:
 
 - **KNN went from half the time to almost nothing**, with the same results: on every benchmark query the in-memory search returns the same chunks in the same order as sqlite-vec, apart from exact ties.
-- **A search now costs less than a keystroke.** That's why the TUI waits only 80 ms (it used to wait 250 ms) after you stop typing.
-- **The p95 is BM25 on long queries.** Every word is a prefix match, so common words like "de" or "the" expand to thousands of terms. Most queries never hit it (p50 0.5 ms).
+- **The slow tail was BM25 scoring words that don't matter.** "de" is in 87% of the chunks, so a long Spanish question made FTS5 score nearly the whole index for a word whose IDF is close to 0. Terms found in more than 20% of the chunks are now left out of the keyword query (taken from the index itself, so it works in any language). Long questions went from 30-40 ms to 1-6 ms, and their top 30 stayed the same or nearly so (28-30 of 30). Every word stays a prefix match, which stands in for stemming ("árbol" finds "árboles").
+- **A search now costs less than a keystroke.** That's why the TUI waits only 80 ms (it used to wait 250 ms) after you stop typing. Embedding the query is now most of what's left, and it already runs inside onnxruntime.
+
+### Startup
+
+Measured from launch, with the model already downloaded:
+
+| | before | after |
+| --- | --: | --: |
+| TUI on screen | 1.30 s | 1.06 s |
+| first (keyword) results | 3.95 s | **1.40 s** |
+| hybrid results | 3.95 s | **2.30 s** |
+| `vaultsearch search "…" --no-sync` | 3.10 s | 1.93 s |
+
+- **fastembed is only used to download the model.** Importing it took ~1.7 s, mostly for its image models and HTTP clients. Once the model is cached, `OnnxEmbedder` runs it with onnxruntime and tokenizers, set up as fastembed does, and gives identical vectors (max difference 0.0 on 300 real chunks). Loading the model went from 2.6 s to 1.35 s.
+- **The TUI draws before it loads the engine.** numpy, sqlite-vec, onnxruntime and watchdog are imported in the background thread that opens the engine, not before the first frame.
+- **The index opens before the model.** Keyword search needs no model, so you get keyword results while it loads and the same query becomes hybrid when it's ready.
 
 ## Known limitations
 
