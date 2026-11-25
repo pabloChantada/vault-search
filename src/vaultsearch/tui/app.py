@@ -31,7 +31,7 @@ from ..core.text import query_words, snippet
 from .help import COMMANDS, WELCOME_MD
 from .images import ImageScreen
 from .screens import ActivityScreen, ShortcutsScreen
-from .suggest import SearchSuggester, last_word
+from .suggest import SearchInput, SearchSuggester, last_word
 from .themes import NIGHT_THEME, PAPER_THEME, THEMES
 from .widgets import CommandItem, NoteView, ResultItem, ResultList, mark_words
 
@@ -104,7 +104,7 @@ class VaultSearchApp(App):
         with Horizontal(id="brand"):
             yield Static(f"[b]vaultsearch[/]  [$ash]{escape(self.cfg.vault.name)}[/]", id="title")
             yield Static(" 印 ", id="seal", classes="busy")
-        yield Input(
+        yield SearchInput(
             placeholder="Search your vault",
             id="prompt",
             suggester=SearchSuggester(COMMANDS, self._find_words, self._show_words),
@@ -451,16 +451,17 @@ class VaultSearchApp(App):
             return []
         return self.engine.store.suggest_words(prefix, limit=WORD_SUGGESTIONS)
 
-    def _show_words(self, value: str, words: list[str]) -> None:
+    def _show_words(self, value: str, words: list[str], selected: int = 0) -> None:
         prompt = self.query_one("#prompt", Input)
         if value != prompt.value:
             return  # the user kept typing: a newer list is on its way
         line = self.query_one("#words", Static)
         line.display = bool(words)
         if words:
-            first, *rest = (f"[@click=app.use_word('{w}')]{escape(w)}[/]" for w in words)
             # Clickable words look like the reader's links; the one → takes is in bold
-            line.update(f"[$ash]→[/] [b]{first}[/]  " + "  ".join(rest))
+            links = [f"[@click=app.use_word('{w}')]{escape(w)}[/]" for w in words]
+            links[selected] = f"[b]{links[selected]}[/]"
+            line.update("[$ash]→[/] " + "  ".join(links) + "   [$ash]tab: next word[/]")
 
     def action_use_word(self, word: str) -> None:
         """Put `word` in place of the word being typed, and carry on typing after it."""

@@ -88,7 +88,7 @@ Startup is part of the speed budget:
   - The vocabulary is folded (lowercase, no accents), so each suggestion is shown the way it's most often written in a sample of 60 chunks: "arb" offers "árbol". That costs 5–25 ms the first time and is cached after.
   - Common words, numbers and runs of Japanese text are left out.
   - The lookup runs in a thread and gives up if the indexer holds the lock, so typing never waits.
-  - The first suggestion is the input's ghost text (`→` accepts it), and the rest are clickable in the line under it.
+  - The marked suggestion is the input's ghost text (`→` accepts it). `SearchInput` cycles the mark with `tab` / `shift+tab` (with nothing suggested, `tab` moves the focus as usual), and every word in the line is clickable.
 
 ## The vault map
 

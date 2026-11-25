@@ -250,3 +250,38 @@ def test_tui_suggests_words_as_you_type(cfg):
             await pilot.press("ctrl+q")
 
     asyncio.run(scenario())
+
+
+def test_tui_tab_cycles_through_the_suggested_words(cfg, vault):
+    (vault / "Kana.md").write_text("# Kana\nKatakana, karaoke and a katana.\n", encoding="utf-8")
+
+    async def scenario():
+        app = VaultSearchApp(cfg)
+        async with app.run_test(size=(120, 30)) as pilot:
+            await _ready(app, pilot)
+            prompt = app.query_one("#prompt")
+
+            await pilot.press(*"ka")
+            await pilot.pause(0.3)
+            words = prompt.suggester.words
+            assert len(words) >= 4 and {"kanji", "katakana", "karaoke", "katana"} <= set(words)
+
+            def offered():
+                return prompt._suggestion  # the ghost text
+
+            assert offered() == words[0]
+            await pilot.press("tab")
+            assert offered() == words[1] and f"[b][@click=app.use_word('{words[1]}')]" in str(
+                app.query_one("#words").content)
+            await pilot.press("shift+tab", "shift+tab")  # back past the first wraps to the last
+            assert offered() == words[-1]
+            await pilot.press("right")
+            assert prompt.value == words[-1]
+
+            prompt.value = "kanji "  # nothing being typed: tab moves the focus as before
+            await pilot.pause(0.2)
+            await pilot.press("tab")
+            assert app.focused is not prompt
+            await pilot.press("ctrl+q")
+
+    asyncio.run(scenario())
