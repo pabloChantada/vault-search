@@ -26,7 +26,7 @@ class Chunk:
 
     @property
     def hash(self) -> str:
-        return hashlib.sha1(f"{self.heading}\n{self.text}".encode("utf-8")).hexdigest()
+        return hashlib.sha1(f"{self.heading}\n{self.text}".encode()).hexdigest()
 
 
 @dataclass

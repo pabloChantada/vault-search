@@ -54,9 +54,9 @@ def project(
     if method in ("auto", "umap"):
         try:
             import umap  # optional: `uv sync --extra viz`
-        except ImportError:
+        except ImportError as e:
             if method == "umap":
-                raise SystemExit("umap-learn is not installed: run `uv sync --extra viz` or use --method pca")
+                raise SystemExit("umap-learn is not installed: run `uv sync --extra viz` or use --method pca") from e
             method = "pca"
         else:
             method = "umap" if n > 15 else "pca"  # UMAP needs more points than neighbours

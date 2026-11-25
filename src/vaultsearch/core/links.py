@@ -52,7 +52,7 @@ class VaultFiles:
         """The file a link points at, or None. `default_ext` is tried when the link has none
         (`[[Kanji]]` means `Kanji.md`)."""
         names = [target]
-        if default_ext and not Path(target).suffix.lower() == default_ext:
+        if default_ext and Path(target).suffix.lower() != default_ext:
             names.insert(0, target + default_ext)
         with self._lock:
             if not self._built:

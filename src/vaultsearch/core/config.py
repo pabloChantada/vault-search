@@ -24,7 +24,7 @@ class Config:
     ignore_dirs: tuple[str, ...] = field(default=DEFAULT_IGNORE)
 
     @classmethod
-    def from_env(cls, vault: str | None = None, db: str | None = None) -> "Config":
+    def from_env(cls, vault: str | None = None, db: str | None = None) -> Config:
         vault_str = vault or os.environ.get("VAULT_PATH")
         if not vault_str:
             raise SystemExit("No vault given: pass --vault or set VAULT_PATH")
