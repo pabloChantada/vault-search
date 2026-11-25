@@ -1,6 +1,7 @@
 """The interactive app: search as you type, read the note, open it in Obsidian or on the map."""
 from __future__ import annotations
 
+import contextlib
 import logging
 import os
 import subprocess
@@ -43,15 +44,13 @@ MAP_WARM_INTERVAL_S = 60.0  # how often the background map warm-up checks the in
 class _PanelLogHandler(logging.Handler):
     """Routes engine logs (indexer/watcher, other threads) into the app."""
 
-    def __init__(self, app: "VaultSearchApp"):
+    def __init__(self, app: VaultSearchApp):
         super().__init__(logging.INFO)
         self.app = app
 
     def emit(self, record: logging.LogRecord) -> None:
-        try:
+        with contextlib.suppress(Exception):  # the app is shutting down
             self.app.call_from_thread(self.app.log_event, record.levelno, record.getMessage())
-        except Exception:
-            pass  # app shutting down
 
 
 class VaultSearchApp(App):

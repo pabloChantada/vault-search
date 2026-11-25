@@ -46,7 +46,7 @@ class _Host(App):
         yield NoteView(id="note")
 
 
-def test_image_opens_in_the_preview_and_walks_the_note_images(tmp_path, monkeypatch):
+def test_image_opens_in_the_preview_and_walks_the_note_images(tmp_path, monkeypatch, note_ready):
     note = _note_with_images(tmp_path)
     monkeypatch.setattr(images, "_mode", "sixel")
 
@@ -55,7 +55,7 @@ def test_image_opens_in_the_preview_and_walks_the_note_images(tmp_path, monkeypa
             view = pilot.app.query_one(NoteView)
             view.files = VaultFiles(tmp_path)
             view.show_file(note)
-            await pilot.pause(0.3)
+            await note_ready(pilot, view)
             second = next(i for i, t in enumerate(view.page.targets) if t.kind == "image" and t.path.name == "b.png")
             view.action_follow(second)
             await pilot.pause(0.2)
@@ -115,7 +115,7 @@ def test_the_app_ticking_underneath_does_not_redraw_the_image(vault, tmp_path, m
     asyncio.run(scenario())
 
 
-def test_without_terminal_graphics_images_open_in_the_system_viewer(tmp_path, monkeypatch):
+def test_without_terminal_graphics_images_open_in_the_system_viewer(tmp_path, monkeypatch, note_ready):
     note = _note_with_images(tmp_path)
     opened = []
     monkeypatch.setattr(images, "_mode", "none")
@@ -126,7 +126,7 @@ def test_without_terminal_graphics_images_open_in_the_system_viewer(tmp_path, mo
             view = pilot.app.query_one(NoteView)
             view.files = VaultFiles(tmp_path)
             view.show_file(note)
-            await pilot.pause(0.3)
+            await note_ready(pilot, view)
             first = next(i for i, t in enumerate(view.page.targets) if t.kind == "image")
             view.action_follow(first)
             await pilot.pause(0.1)

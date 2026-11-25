@@ -22,9 +22,10 @@ import sys
 import tempfile
 import time
 from collections import defaultdict
+from collections.abc import Callable
 from dataclasses import replace
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 from vaultsearch.core import Config
 from vaultsearch.core import indexer as indexer_mod
@@ -88,7 +89,8 @@ def _run_sync(indexer: Indexer) -> tuple[float, PhaseTimer, dict[str, int], dict
 
 def _phase_report(total: float, timer: PhaseTimer) -> list[dict[str, Any]]:
     rows = [{"phase": name, "seconds": s, "calls": timer.calls[name]} for name, s in timer.seconds.items()]
-    rows.append({"phase": "read + hash + other", "seconds": max(total - sum(timer.seconds.values()), 0.0), "calls": None})
+    other = max(total - sum(timer.seconds.values()), 0.0)
+    rows.append({"phase": "read + hash + other", "seconds": other, "calls": None})
     for r in rows:
         r["share"] = r["seconds"] / total if total else 0.0
     return sorted(rows, key=lambda r: r["seconds"], reverse=True)
@@ -140,7 +142,8 @@ def _print_report(res: dict[str, Any]) -> None:
     con.print(f"[bold]Vault[/] {res['vault']}")
     con.print(
         f"[bold]Embedder[/] {res['embedder']} (load {res['model_load_s']:.2f} s, "
-        f"ONNX batch {res['embed_batch_size']}, {res['embed_threads'] or 'default'} threads, index batch {res['index_batch_chunks']} chunks)"
+        f"ONNX batch {res['embed_batch_size']}, {res['embed_threads'] or 'default'} threads, "
+        f"index batch {res['index_batch_chunks']} chunks)"
     )
     con.print(
         f"[bold]Cold build[/] {res['notes']} notes, {res['chunks']} chunks in {cold['seconds']:.2f} s "
@@ -148,7 +151,8 @@ def _print_report(res: dict[str, Any]) -> None:
     )
     c = cold["counters"]
     if c.get("texts embedded"):
-        con.print(f"           {c['texts embedded']} texts embedded, avg {c['chars embedded'] / c['texts embedded']:.0f} chars")
+        avg = c["chars embedded"] / c["texts embedded"]
+        con.print(f"           {c['texts embedded']} texts embedded, avg {avg:.0f} chars")
 
     for title, run in (("Cold build", cold), (f"Warm sync ({warm['seconds'] * 1000:.0f} ms)", warm)):
         t = Table(title=title, title_justify="left")
@@ -157,7 +161,8 @@ def _print_report(res: dict[str, Any]) -> None:
         t.add_column("share", justify="right")
         t.add_column("calls", justify="right")
         for r in run["phases"]:
-            t.add_row(r["phase"], f"{r['seconds']:.3f}", f"{r['share']:.0%}", "" if r["calls"] is None else str(r["calls"]))
+            calls = "" if r["calls"] is None else str(r["calls"])
+            t.add_row(r["phase"], f"{r['seconds']:.3f}", f"{r['share']:.0%}", calls)
         con.print(t)
 
 
@@ -167,7 +172,8 @@ def main(argv: list[str] | None = None) -> None:
     ap.add_argument("--embedder", choices=["fastembed", "hash"], help="Override VAULTSEARCH_EMBEDDER")
     ap.add_argument("--embed-batch", type=int, help="Texts per ONNX run (VAULTSEARCH_EMBED_BATCH)")
     ap.add_argument("--threads", type=int, help="ONNX intra-op threads (VAULTSEARCH_EMBED_THREADS)")
-    ap.add_argument("--index-batch", type=int, help="Chunks gathered across notes per embed call (VAULTSEARCH_INDEX_BATCH)")
+    ap.add_argument("--index-batch", type=int,
+                    help="Chunks gathered across notes per embed call (VAULTSEARCH_INDEX_BATCH)")
     ap.add_argument("--json", action="store_true", help="Also print the raw results as JSON on stdout")
     args = ap.parse_args(argv)
 

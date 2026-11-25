@@ -47,7 +47,7 @@ def test_tui_live_search_and_recent(cfg, vault):
     asyncio.run(scenario())
 
 
-def test_tui_vim_keys_move_through_results_and_note(cfg):
+def test_tui_vim_keys_move_through_results_and_note(cfg, note_ready):
     async def scenario():
         app = VaultSearchApp(cfg)
         async with app.run_test(size=(120, 30)) as pilot:
@@ -60,7 +60,7 @@ def test_tui_vim_keys_move_through_results_and_note(cfg):
             await pilot.press("l")
             note = app.query_one("#note", NoteView)
             assert app.focused is note
-            await pilot.pause(0.3)
+            await note_ready(pilot, note)
             # The note opens at the section the hit came from ("Long > First" or "> Second"), not at the top
             section = results.highlighted_child.heading.split(" > ")[-1]
             section_line = dict((t, line) for line, t in note.page.headings)[section]
@@ -114,7 +114,7 @@ def test_tui_renders_the_neighbours_ahead(cfg, vault):
     asyncio.run(scenario())
 
 
-def test_tui_follows_links_by_key_and_click_and_goes_back(cfg, vault):
+def test_tui_follows_links_by_key_and_click_and_goes_back(cfg, vault, note_ready):
     async def scenario():
         app = VaultSearchApp(cfg)
         async with app.run_test(size=(120, 30)) as pilot:
@@ -123,7 +123,7 @@ def test_tui_follows_links_by_key_and_click_and_goes_back(cfg, vault):
             await pilot.pause(0.8)
             await pilot.press("l")
             note = app.query_one("#note", NoteView)
-            await pilot.pause(0.3)
+            await note_ready(pilot, note)
             journal = note._source[1]
             assert journal.name == "2026-11-17.md"
 
@@ -134,16 +134,16 @@ def test_tui_follows_links_by_key_and_click_and_goes_back(cfg, vault):
             assert note._hints is None and note.scroll_y == y
 
             await pilot.press("f", "a")  # the only link gets the first label
-            await pilot.pause(0.3)
+            await note_ready(pilot, note)
             assert note._source[1].name == "Kanji.md"
             await pilot.press("backspace")
-            await pilot.pause(0.3)
+            await note_ready(pilot, note)
             assert note._source[1] == journal
 
             line, x, _, _ = note.page.links[0]  # now with the mouse
             gutter = note.gutter  # border + padding on the left
             await pilot.click("#note", offset=(gutter.left + x, line - round(note.scroll_y)))
-            await pilot.pause(0.3)
+            await note_ready(pilot, note)
             assert note._source[1].name == "Kanji.md"
             await pilot.press("ctrl+q")
 

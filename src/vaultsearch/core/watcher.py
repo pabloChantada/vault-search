@@ -19,7 +19,7 @@ log = logging.getLogger("vaultsearch")
 
 
 class _Handler(FileSystemEventHandler):
-    def __init__(self, watcher: "VaultWatcher"):
+    def __init__(self, watcher: VaultWatcher):
         self.w = watcher
 
     def on_any_event(self, event: FileSystemEvent) -> None:
@@ -30,12 +30,10 @@ class _Handler(FileSystemEventHandler):
         src = str(event.src_path)
         if event.event_type == "moved":
             self.w.enqueue_move(src, str(event.dest_path))
-        elif event.event_type in ("created", "modified", "closed"):
-            if self.w.indexer.is_note(src):
-                self.w.enqueue(src, "upsert")
-        elif event.event_type == "deleted":
-            if self.w.indexer.is_note(src):
-                self.w.enqueue(src, "delete")
+        elif event.event_type in ("created", "modified", "closed") and self.w.indexer.is_note(src):
+            self.w.enqueue(src, "upsert")
+        elif event.event_type == "deleted" and self.w.indexer.is_note(src):
+            self.w.enqueue(src, "delete")
 
 
 class VaultWatcher:

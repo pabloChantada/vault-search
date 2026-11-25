@@ -59,7 +59,8 @@ def build_server(cfg: Config) -> FastMCP:
         if not p.is_file():
             return json.dumps({"error": f"Note not found: {path}"}, ensure_ascii=False)
         text = p.read_text(encoding="utf-8", errors="replace")
-        return json.dumps({"path": path, "content": text, "backlinks": engine.store.backlinks(p.stem)}, ensure_ascii=False)
+        note = {"path": path, "content": text, "backlinks": engine.store.backlinks(p.stem)}
+        return json.dumps(note, ensure_ascii=False)
 
     @mcp.tool()
     def list_notes(folder: str | None = None, limit: int = 30) -> str:

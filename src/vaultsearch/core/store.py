@@ -171,7 +171,8 @@ class Store:
                 return False
             if self.db.execute("SELECT 1 FROM files WHERE path=?", (new,)).fetchone():
                 self.delete_file(new)
-            self.db.execute("UPDATE files SET path=? WHERE path=?", (new, old))  # ON UPDATE CASCADE moves the chunks too
+            # ON UPDATE CASCADE moves the chunks too
+            self.db.execute("UPDATE files SET path=? WHERE path=?", (new, old))
             return True
 
     # ---------- search ----------
@@ -213,7 +214,8 @@ class Store:
             if folder:
                 prefix = folder.strip("/") + "/"
                 return self.db.execute(
-                    "SELECT path, title, tags, mtime FROM files WHERE path LIKE ? ESCAPE '\\' ORDER BY mtime DESC LIMIT ?",
+                    "SELECT path, title, tags, mtime FROM files WHERE path LIKE ? ESCAPE '\\' "
+                    "ORDER BY mtime DESC LIMIT ?",
                     (prefix.replace("%", "\\%").replace("_", "\\_") + "%", limit),
                 ).fetchall()
             return self.db.execute(
@@ -230,7 +232,9 @@ class Store:
     def notes(self) -> list[sqlite3.Row]:
         """Every note's metadata, ordered by path."""
         with self.lock:
-            return self.db.execute("SELECT path, title, tags, links, mtime, created FROM files ORDER BY path").fetchall()
+            return self.db.execute(
+                "SELECT path, title, tags, links, mtime, created FROM files ORDER BY path"
+            ).fetchall()
 
     def embedding_fingerprint(self) -> str:
         """A digest that changes exactly when some note's chunks (and so its embeddings) change.
