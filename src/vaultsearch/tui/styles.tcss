@@ -52,6 +52,12 @@ Screen {
     color: $ash;
 }
 
+#words {
+    height: 1;
+    display: none;
+    padding-left: 1;
+}
+
 #scope {
     height: 1;
     margin-top: 1;

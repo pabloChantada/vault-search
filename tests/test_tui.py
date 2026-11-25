@@ -217,3 +217,71 @@ def test_the_note_follows_the_new_results_not_the_old_ones(cfg):
             await pilot.press("ctrl+q")
 
     asyncio.run(scenario())
+
+
+def test_tui_suggests_words_as_you_type(cfg):
+    async def scenario():
+        app = VaultSearchApp(cfg)
+        async with app.run_test(size=(120, 30)) as pilot:
+            await _ready(app, pilot)
+            prompt, words = app.query_one("#prompt"), app.query_one("#words")
+
+            await pilot.press(*"wea")
+            await pilot.pause(0.3)
+            assert words.display and "weather" in str(words.render())
+            await pilot.press("right")  # accepts the ghost completion
+            assert prompt.value == "weather"
+
+            prompt.value = ""  # (ctrl+a is "home" in Textual's Input, not "select all")
+            await pilot.press(*"study ra")
+            await pilot.pause(0.3)
+            assert "rain" in str(words.render())
+            app.action_use_word("rain")  # what clicking a suggestion does
+            assert prompt.value == "study rain " and prompt.cursor_position == len("study rain ")
+            await pilot.pause(0.1)
+            assert not words.display  # nothing is being typed after the space
+
+            await pilot.press(*"we")
+            await pilot.pause(0.3)
+            assert words.display
+            prompt.value = ""
+            await pilot.pause(0.1)
+            assert not words.display
+            await pilot.press("ctrl+q")
+
+    asyncio.run(scenario())
+
+
+def test_tui_tab_cycles_through_the_suggested_words(cfg, vault):
+    (vault / "Kana.md").write_text("# Kana\nKatakana, karaoke and a katana.\n", encoding="utf-8")
+
+    async def scenario():
+        app = VaultSearchApp(cfg)
+        async with app.run_test(size=(120, 30)) as pilot:
+            await _ready(app, pilot)
+            prompt = app.query_one("#prompt")
+
+            await pilot.press(*"ka")
+            await pilot.pause(0.3)
+            words = prompt.suggester.words
+            assert len(words) >= 4 and {"kanji", "katakana", "karaoke", "katana"} <= set(words)
+
+            def offered():
+                return prompt._suggestion  # the ghost text
+
+            assert offered() == words[0]
+            await pilot.press("tab")
+            assert offered() == words[1] and f"[b][@click=app.use_word('{words[1]}')]" in str(
+                app.query_one("#words").content)
+            await pilot.press("shift+tab", "shift+tab")  # back past the first wraps to the last
+            assert offered() == words[-1]
+            await pilot.press("right")
+            assert prompt.value == words[-1]
+
+            prompt.value = "kanji "  # nothing being typed: tab moves the focus as before
+            await pilot.pause(0.2)
+            await pilot.press("tab")
+            assert app.focused is not prompt
+            await pilot.press("ctrl+q")
+
+    asyncio.run(scenario())

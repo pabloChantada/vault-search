@@ -13,6 +13,8 @@ COMMANDS = {
 SHORTCUTS: list[tuple[str, list[tuple[str, str]]]] = [
     ("Search", [
         ("type", "search as you go"),
+        ("tab  shift+tab", "next, previous suggested word"),
+        ("→", "take the suggested word"),
         ("enter  ↓", "go to the results"),
         ("/  esc", "back to the search box"),
     ]),

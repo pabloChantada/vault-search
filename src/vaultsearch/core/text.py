@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import re
+import unicodedata
 from collections.abc import Callable
 
 import frontmatter
@@ -9,6 +10,11 @@ import frontmatter
 WORD_RE = re.compile(r"\w+", re.UNICODE)
 
 _WIKILINK_RE = re.compile(r"!?\[\[([^\]|#]+)(?:#[^\]|]*)?(?:\|([^\]]+))?\]\]")
+
+
+def fold(word: str) -> str:
+    """Lowercase and strip diacritics, as the FTS5 tokenizer does to the terms it indexes."""
+    return "".join(c for c in unicodedata.normalize("NFKD", word.lower()) if not unicodedata.combining(c))
 
 
 def query_words(query: str) -> list[str]:

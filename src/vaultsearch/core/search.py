@@ -2,12 +2,11 @@
 from __future__ import annotations
 
 import json
-import unicodedata
 from dataclasses import dataclass
 
 from .embedder import Embedder
 from .store import Store
-from .text import WORD_RE
+from .text import WORD_RE, fold
 
 RRF_K = 60
 
@@ -32,11 +31,6 @@ class Hit:
         }
 
 
-def _fold(word: str) -> str:
-    """Lowercase and strip diacritics, as the FTS5 tokenizer does to the terms it indexes."""
-    return "".join(c for c in unicodedata.normalize("NFKD", word.lower()) if not unicodedata.combining(c))
-
-
 def _fts_query(q: str, common: frozenset[str] = frozenset()) -> str:
     """An FTS5 expression for `q`: every word quoted (no syntax errors), as a prefix, ORed.
 
@@ -45,8 +39,8 @@ def _fts_query(q: str, common: frozenset[str] = frozenset()) -> str:
     row they match ("de" is in 87% of the chunks of a Spanish vault, and made long
     questions take 30-40 ms instead of 1-2 ms). If every word is common, they're all kept.
     """
-    words = list({_fold(w): w for w in WORD_RE.findall(q) if len(w) > 1}.values())
-    words = [w for w in words if _fold(w) not in common] or words
+    words = list({fold(w): w for w in WORD_RE.findall(q) if len(w) > 1}.values())
+    words = [w for w in words if fold(w) not in common] or words
     return " OR ".join(f'"{w}"*' for w in words)
 
 

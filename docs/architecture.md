@@ -84,6 +84,11 @@ Startup is part of the speed budget:
 - **Links.** Links become click actions, and are also reachable with `f` hints; `backspace` goes back. `core/links.py` resolves them the way Obsidian does.
 - **Images.** Images are clickable captions, because terminal cells are too coarse for thumbnails. `tui/images.py` shows an image at full resolution in a modal screen through `textual-image`: Sixel on Windows Terminal, the Kitty protocol in Ghostty. Without either protocol, the image opens in the system viewer.
 - **Search as you type.** A search waits 80 ms after the last keystroke. Searches run in a worker thread, and stale results are dropped.
+- **Word suggestions.** As you type, `Store.suggest_words` looks up the last word's prefix in the FTS5 vocabulary (the same `fts5vocab` TEMP table that finds the common terms) and ranks the matches by how many chunks contain them. It takes ~1 ms.
+  - The vocabulary is folded (lowercase, no accents), so each suggestion is shown the way it's most often written in a sample of 60 chunks: "arb" offers "árbol". That costs 5–25 ms the first time and is cached after.
+  - Common words, numbers and runs of Japanese text are left out.
+  - The lookup runs in a thread and gives up if the indexer holds the lock, so typing never waits.
+  - The marked suggestion is the input's ghost text (`→` accepts it). `SearchInput` cycles the mark with `tab` / `shift+tab` (with nothing suggested, `tab` moves the focus as usual), and every word in the line is clickable.
 
 ## The vault map
 

@@ -22,7 +22,6 @@ from textual.containers import Horizontal
 from textual.events import Key
 from textual.markup import escape
 from textual.screen import Screen
-from textual.suggester import SuggestFromList
 from textual.timer import Timer
 from textual.widgets import Input, ListItem, Static
 
@@ -32,6 +31,7 @@ from ..core.text import query_words, snippet
 from .help import COMMANDS, WELCOME_MD
 from .images import ImageScreen
 from .screens import ActivityScreen, ShortcutsScreen
+from .suggest import SearchInput, SearchSuggester, last_word
 from .themes import NIGHT_THEME, PAPER_THEME, THEMES
 from .widgets import CommandItem, NoteView, ResultItem, ResultList, mark_words
 
@@ -41,6 +41,7 @@ if TYPE_CHECKING:
 # Keys that are also letters: they must type into the search box, not act, while it has focus
 _LETTER_ACTIONS = {"open_selected", "copy_path", "map", "shortcuts"}
 _EVENT_SHOWN_S = 8.0  # how long the latest watcher event stays in the status line
+WORD_SUGGESTIONS = 5  # words offered under the search box as you type
 PREFETCH_AROUND = 5  # notes rendered ahead above and below the selected result
 # A search takes ~6 ms at p50 (see scripts/bench_search.py), so this only skips the keystrokes of
 # a fast typist instead of hiding the search cost
@@ -103,11 +104,12 @@ class VaultSearchApp(App):
         with Horizontal(id="brand"):
             yield Static(f"[b]vaultsearch[/]  [$ash]{escape(self.cfg.vault.name)}[/]", id="title")
             yield Static(" 印 ", id="seal", classes="busy")
-        yield Input(
+        yield SearchInput(
             placeholder="Search your vault",
             id="prompt",
-            suggester=SuggestFromList(list(COMMANDS), case_sensitive=False),
+            suggester=SearchSuggester(COMMANDS, self._find_words, self._show_words),
         )
+        yield Static(id="words")
         yield Static(id="scope")
         with Horizontal(id="main"):
             yield ResultList(id="results")
@@ -281,6 +283,8 @@ class VaultSearchApp(App):
     # ---------- search ----------
     @on(Input.Changed, "#prompt")
     def _on_prompt_changed(self, event: Input.Changed) -> None:
+        if not last_word(event.value):
+            self._show_words(event.value, [])  # the suggester isn't asked about an empty box
         q = event.value.strip()
         if q.startswith("/"):
             self._show_command_hints(q)
@@ -440,6 +444,35 @@ class VaultSearchApp(App):
             self._map_busy = False
 
     # ---------- slash commands ----------
+    # ---------- word suggestions under the search box ----------
+    def _find_words(self, prefix: str) -> list[str]:
+        """Runs in a thread (see SearchSuggester)."""
+        if not self.engine.keywords_ready.is_set() or self.engine.store is None:
+            return []
+        return self.engine.store.suggest_words(prefix, limit=WORD_SUGGESTIONS)
+
+    def _show_words(self, value: str, words: list[str], selected: int = 0) -> None:
+        prompt = self.query_one("#prompt", Input)
+        if value != prompt.value:
+            return  # the user kept typing: a newer list is on its way
+        line = self.query_one("#words", Static)
+        line.display = bool(words)
+        if words:
+            # Clickable words look like the reader's links; the one → takes is in bold
+            links = [f"[@click=app.use_word('{w}')]{escape(w)}[/]" for w in words]
+            links[selected] = f"[b]{links[selected]}[/]"
+            line.update("[$ash]→[/] " + "  ".join(links) + "   [$ash]tab: next word[/]")
+
+    def action_use_word(self, word: str) -> None:
+        """Put `word` in place of the word being typed, and carry on typing after it."""
+        prompt = self.query_one("#prompt", Input)
+        m = last_word(prompt.value)
+        if m is None:
+            return
+        prompt.value = prompt.value[: m.start()] + word + " "
+        prompt.cursor_position = len(prompt.value)
+        prompt.focus()
+
     def _show_command_hints(self, q: str) -> None:
         typed = q.split()[0].lower()
         items = [CommandItem(c, d) for c, d in COMMANDS.items() if c.startswith(typed)]
