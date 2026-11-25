@@ -12,11 +12,15 @@ dependencies = [
     "python-frontmatter>=1.1",
     "rich>=13",
     "textual>=1.0",
+    "textual-image>=0.8",
 ]
 
 [project.optional-dependencies]
 dev = ["pytest>=8"]
 viz = ["umap-learn>=0.5"]  # better 3D layout for `vaultsearch map`; falls back to PCA without it
+window = [
+    "pywebview>=5",
+]
 
 [project.scripts]
 vaultsearch = "vaultsearch.cli.main:main"
