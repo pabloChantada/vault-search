@@ -172,6 +172,7 @@ A few decisions worth explaining:
 - **Hybrid search.** Embeddings find notes by meaning ("how was I studying" finds "review routine"), but they're bad at names and exact terms. BM25 is the opposite. Merging both rankings with Reciprocal Rank Fusion gets you the best of each, with no score tuning.
 - **Incremental indexing.** Every chunk is hashed. Edit one paragraph and only that paragraph gets re-embedded. Renaming or moving a note re-embeds nothing.
 - **Batched full builds.** A full index build gathers new chunks across many notes, sorts them by length (each ONNX batch is padded to its longest text) and embeds and writes them in large batches, one transaction each.
+- **Vectors are searched in memory.** sqlite-vec stores the embeddings, but searching them there meant a ~12 ms scan per query. On startup they're loaded into one normalised numpy matrix, kept in step with every write, so a search is a single matrix-vector product: exact, and ~0.5 ms for 6,500 chunks. An approximate index (IVF, HNSW) would only pay off at around 100k chunks.
 - **The index lives outside the vault** (`~/.vaultsearch/`). If your vault syncs through iCloud or OneDrive, a database file inside it would get synced mid-write and eventually corrupted.
 - **A safety-net rescan.** Cloud-synced folders don't always fire file events reliably, so the watcher also does a cheap full rescan every 10 minutes. It only compares modification times, so it costs almost nothing.
 - **Local, multilingual embeddings.** The default model (`paraphrase-multilingual-MiniLM-L12-v2`, via ONNX) handles English, Spanish, Japanese and dozens more, runs on CPU and needs no API key.
@@ -232,6 +233,32 @@ What it shows:
 - A warm sync (nothing changed) takes ~0.2 s, mostly reading and hashing files.
 
 Further speed-ups (an int8-quantised model, shorter chunks, multi-process `parallel=`, GPU) would each cost retrieval quality, RAM or a heavy dependency. For an index that is built once and then updated incrementally, that isn't worth it.
+
+### Benchmarking search
+
+`scripts/bench_search.py` runs a fixed set of queries (keywords, questions, long questions, Japanese, two-letter prefixes) against a snapshot of your index and reports p50/p95/p99 per phase. Pass `--queries <file>` to use your own, one per line:
+
+```bash
+uv run python scripts/bench_search.py --vault "<path>"            # add --json for raw numbers
+```
+
+#### Results
+
+Same vault and laptop, 14 queries × 30 runs, 30 results each (what the TUI asks for):
+
+| phase                | sqlite-vec KNN, p50 / p95 | in-memory KNN, p50 / p95 |
+| -------------------- | ------------------------: | -----------------------: |
+| embed the query      | 4.0 / 6.5 ms              | 3.8 / 6.5 ms             |
+| BM25 (FTS5)          | 0.5 / 40.7 ms             | 0.5 / 41.5 ms            |
+| KNN                  | 12.4 / 13.0 ms            | **0.5 / 0.7 ms**         |
+| fetch rows + fuse    | 0.9 / 1.5 ms              | 1.0 / 1.6 ms             |
+| **total**            | **18.1 / 61.7 ms**        | **6.0 / 50.1 ms**        |
+
+What it shows:
+
+- **KNN went from half the time to almost nothing**, with the same results: on every benchmark query the in-memory search returns the same chunks in the same order as sqlite-vec, apart from exact ties.
+- **A search now costs less than a keystroke.** That's why the TUI waits only 80 ms (it used to wait 250 ms) after you stop typing.
+- **The p95 is BM25 on long queries.** Every word is a prefix match, so common words like "de" or "the" expand to thousands of terms. Most queries never hit it (p50 0.5 ms).
 
 ## Known limitations
 

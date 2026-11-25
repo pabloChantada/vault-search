@@ -38,6 +38,9 @@ from .widgets import CommandItem, NoteView, ResultItem, ResultList, mark_words
 _LETTER_ACTIONS = {"open_selected", "copy_path", "map", "shortcuts"}
 _EVENT_SHOWN_S = 8.0  # how long the latest watcher event stays in the status line
 PREFETCH_AROUND = 5  # notes rendered ahead above and below the selected result
+# A search takes ~6 ms at p50 (see scripts/bench_search.py), so this only skips the keystrokes of
+# a fast typist instead of hiding the search cost
+SEARCH_DEBOUNCE_S = 0.08
 MAP_WARM_INTERVAL_S = 60.0  # how often the background map warm-up checks the index for changes
 
 
@@ -278,7 +281,7 @@ class VaultSearchApp(App):
         if self._debounce:
             self._debounce.stop()
         if q:
-            self._debounce = self.set_timer(0.25, lambda: self.run_search(q))
+            self._debounce = self.set_timer(SEARCH_DEBOUNCE_S, lambda: self.run_search(q))
 
     @on(Input.Submitted, "#prompt")
     def _on_prompt_submitted(self, event: Input.Submitted) -> None:
