@@ -6,12 +6,21 @@ import json
 import sqlite3
 import struct
 import threading
+from collections.abc import Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 
 import sqlite_vec
 
+from .vectors import VectorIndex
+
 SCHEMA_VERSION = "2"  # 2: files.created
+
+# A term in more than this share of the chunks counts as common (see Store.common_terms)
+COMMON_TERM_SHARE = 0.2
+# Below this many chunks every search is fast anyway, and shares are too noisy to judge by
+COMMON_TERM_MIN_CHUNKS = 200
 
 
 def _pack(vec: list[float]) -> bytes:
@@ -50,7 +59,42 @@ class Store:
         # The watcher and the MCP server / TUI read and write from different threads
         self.lock = threading.RLock()
         self.dim = dim
+        # In-memory copy of vec_chunks for fast KNN, loaded on the first search and kept
+        # in step with every write after that (see vectors.py)
+        self._vectors: VectorIndex | None = None
+        self._common: tuple[int, frozenset[str]] | None = None  # (chunk count, terms)
         self._init_schema(model_id)
+
+    @contextmanager
+    def _writing(self) -> Iterator[None]:
+        """A write transaction. Writes update the in-memory vectors as they go, so if the
+        transaction rolls back, drop that copy and let the next search reload it."""
+        with self.lock:
+            try:
+                with self.db:
+                    yield
+            except BaseException:
+                self._vectors = None
+                raise
+
+    @staticmethod
+    def existing_dim(db_path: Path, model_id: str) -> int | None:
+        """The vector size of the index at `db_path`, if there is one this version and this
+        model can use as it is (opening it then rebuilds nothing). Reads without writing."""
+        if not db_path.is_file():
+            return None
+        try:
+            db = sqlite3.connect(f"file:{db_path.as_posix()}?mode=ro", uri=True)
+            try:
+                meta = dict(db.execute("SELECT key, value FROM meta").fetchall())
+            finally:
+                db.close()
+        except sqlite3.Error:
+            return None
+        if meta.get("schema") != SCHEMA_VERSION or meta.get("model") != model_id:
+            return None
+        dim = meta.get("dim", "")
+        return int(dim) if dim.isdigit() else None
 
     # ---------- schema ----------
     def _init_schema(self, model_id: str) -> None:
@@ -115,7 +159,7 @@ class Store:
 
     def write_notes(self, records: list[NoteRecord]) -> None:
         """Write several notes in a single transaction (one commit instead of one per note)."""
-        with self.lock, self.db:
+        with self._writing():
             for rec in records:
                 self._write_note(rec)
 
@@ -152,21 +196,25 @@ class Store:
                 (cid, title, heading, text),
             )
             self.db.execute("INSERT INTO vec_chunks(rowid, embedding) VALUES (?, ?)", (cid, _pack(emb)))
+            if self._vectors is not None:
+                self._vectors.add(cid, emb)
 
     def _delete_chunk(self, cid: int) -> None:
         self.db.execute("DELETE FROM chunks WHERE id=?", (cid,))
         self.db.execute("DELETE FROM chunks_fts WHERE rowid=?", (cid,))
         self.db.execute("DELETE FROM vec_chunks WHERE rowid=?", (cid,))
+        if self._vectors is not None:
+            self._vectors.remove(cid)
 
     def delete_file(self, path: str) -> None:
-        with self.lock, self.db:
+        with self._writing():
             for r in self.db.execute("SELECT id FROM chunks WHERE path=?", (path,)).fetchall():
                 self._delete_chunk(r["id"])
             self.db.execute("DELETE FROM files WHERE path=?", (path,))
 
     def rename_file(self, old: str, new: str) -> bool:
         """Move a note without re-embedding anything. Returns False if it was not indexed."""
-        with self.lock, self.db:
+        with self._writing():
             if not self.db.execute("SELECT 1 FROM files WHERE path=?", (old,)).fetchone():
                 return False
             if self.db.execute("SELECT 1 FROM files WHERE path=?", (new,)).fetchone():
@@ -190,12 +238,40 @@ class Store:
             return [(r["rowid"], r["s"]) for r in rows]
 
     def vec_search(self, emb: list[float], k: int) -> list[tuple[int, float]]:
+        """The k chunks nearest to `emb` as (chunk id, cosine distance), nearest first."""
         with self.lock:
-            rows = self.db.execute(
-                "SELECT rowid, distance FROM vec_chunks WHERE embedding MATCH ? AND k = ? ORDER BY distance",
-                (_pack(emb), k),
-            ).fetchall()
-            return [(r["rowid"], r["distance"]) for r in rows]
+            if self._vectors is None:
+                self._vectors = self._load_vectors()
+            return self._vectors.search(emb, k)
+
+    def _load_vectors(self) -> VectorIndex:
+        rows = self.db.execute("SELECT rowid, embedding FROM vec_chunks")
+        return VectorIndex.from_rows(self.dim, ((r["rowid"], r["embedding"]) for r in rows))
+
+    def common_terms(self) -> frozenset[str]:
+        """Indexed terms found in more than COMMON_TERM_SHARE of the chunks ("de", "the"...).
+
+        Recomputed (~40 ms) only once the number of chunks has moved by more than 5%.
+        """
+        with self.lock:
+            n = self.db.execute("SELECT COUNT(*) FROM chunks").fetchone()[0]
+            if n < COMMON_TERM_MIN_CHUNKS:
+                return frozenset()
+            if self._common is None or abs(n - self._common[0]) > 0.05 * self._common[0]:
+                # A TEMP table: a per-connection view over the FTS index, not a schema change
+                self.db.execute(
+                    "CREATE VIRTUAL TABLE IF NOT EXISTS temp.chunks_vocab USING fts5vocab(main, chunks_fts, row)"
+                )
+                rows = self.db.execute("SELECT term FROM temp.chunks_vocab WHERE doc > ?", (COMMON_TERM_SHARE * n,))
+                self._common = (n, frozenset(r["term"] for r in rows))
+            return self._common[1]
+
+    def warm(self) -> None:
+        """Load what searches keep in memory now (~100 ms), so the first search doesn't pay for it."""
+        with self.lock:
+            if self._vectors is None:
+                self._vectors = self._load_vectors()
+        self.common_terms()
 
     def chunks_by_ids(self, ids: list[int]) -> dict[int, sqlite3.Row]:
         if not ids:

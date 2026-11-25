@@ -6,7 +6,7 @@ from collections.abc import Callable
 
 import frontmatter
 
-from .search import WORD_RE
+WORD_RE = re.compile(r"\w+", re.UNICODE)
 
 _WIKILINK_RE = re.compile(r"!?\[\[([^\]|#]+)(?:#[^\]|]*)?(?:\|([^\]]+))?\]\]")
 

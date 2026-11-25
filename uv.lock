@@ -3816,12 +3816,18 @@ source = { editable = "." }
 dependencies = [
     { name = "fastembed" },
     { name = "mcp", extra = ["cli"] },
+    { name = "numpy", version = "2.2.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
+    { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version == '3.11.*'" },
+    { name = "numpy", version = "2.5.5", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12'" },
+    { name = "onnxruntime", version = "1.23.2", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
+    { name = "onnxruntime", version = "1.32.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
     { name = "python-frontmatter" },
     { name = "rich" },
     { name = "sqlite-vec" },
     { name = "textual" },
     { name = "textual-image", version = "0.12.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.12'" },
     { name = "textual-image", version = "0.14.4", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12'" },
+    { name = "tokenizers" },
     { name = "watchdog", version = "6.0.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
     { name = "watchdog", version = "7.1.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
 ]
@@ -3847,6 +3853,8 @@ dev = [
 requires-dist = [
     { name = "fastembed", specifier = ">=0.4" },
     { name = "mcp", extras = ["cli"], specifier = ">=1.2" },
+    { name = "numpy", specifier = ">=1.24" },
+    { name = "onnxruntime", specifier = ">=1.17" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8" },
     { name = "python-frontmatter", specifier = ">=1.1" },
     { name = "pywebview", marker = "extra == 'window'", specifier = ">=5" },
@@ -3854,6 +3862,7 @@ requires-dist = [
     { name = "sqlite-vec", specifier = ">=0.1.6" },
     { name = "textual", specifier = ">=1.0" },
     { name = "textual-image", specifier = ">=0.8" },
+    { name = "tokenizers", specifier = ">=0.15" },
     { name = "umap-learn", marker = "extra == 'viz'", specifier = ">=0.5" },
     { name = "watchdog", specifier = ">=4.0" },
 ]

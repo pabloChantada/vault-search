@@ -15,10 +15,11 @@ Hybrid search over an Obsidian vault (the owner's "SecondBrain", stored in iClou
 - Chunks are split by heading and paragraph (~1200 chars max) and hashed, so only changed chunks get re-embedded. Renames re-embed nothing (`ON UPDATE CASCADE`).
 - `sync_all` batches across notes: `_prepare` parses and diffs each note, `_flush` embeds the pending chunks in one call and writes them with `Store.write_notes` in one transaction. Measure changes with `scripts/bench_index.py`.
 - Storage is a single SQLite file outside the vault (`~/.vaultsearch/`), with FTS5 (`unicode61`, diacritics removed) and sqlite-vec (cosine).
-- Search runs BM25 and KNN, fuses them with RRF (k=60) and keeps at most 2 chunks per note.
+- Search runs BM25 and KNN, fuses them with RRF (k=60) and keeps at most 2 chunks per note. KNN doesn't query sqlite-vec: `core/vectors.py` holds every embedding in a numpy matrix, loaded by `Engine.open` and updated by each `Store` write (a rolled-back transaction drops it, and the next search reloads it). Measure search with `scripts/bench_search.py`.
 - The watcher debounces for 2 s and also runs a full rescan every 10 min, because iCloud drops events.
 - The map's positions are cached in `{db}-layout.json`, keyed by `Store.embedding_fingerprint()`. The TUI warms it in a background thread after the first sync. A refit is seeded with the old layout and Procrustes-aligned to it, so notes keep their place.
-- Embeddings use fastembed `paraphrase-multilingual-MiniLM-L12-v2` (384 dims, ONNX on CPU).
+- Embeddings use `paraphrase-multilingual-MiniLM-L12-v2` (384 dims, ONNX on CPU). fastembed only downloads it: once it's cached, `OnnxEmbedder` runs it with onnxruntime + tokenizers (importing fastembed costs ~1.7 s). Its pipeline must stay identical to fastembed's (`test_onnx_embedder_gives_fastembeds_vectors` checks it when the model is cached).
+- Startup is part of the speed budget. `core/engine.py` imports the heavy modules inside `Engine.open`, so the TUI draws first (`test_startup.py` guards it). `open` opens an existing index before the model loads (`keywords_ready`), so keyword search works ~1 s before hybrid search (`ready`).
 
 ## Rules
 
@@ -27,4 +28,5 @@ Hybrid search over an Obsidian vault (the owner's "SecondBrain", stored in iClou
 - Think about Windows: paths, iCloud locking files while it syncs, and `os.startfile`.
 - Tests use `embedder="hash"` (no network). Run them with `uv run pytest`.
 - Changed how the TUI looks? Regenerate the README's screenshots with `uv run python scripts/screenshots.py`.
+- The README is for people using the tool. Technical details go in `docs/architecture.md`, and measurements in `docs/performance.md` (update them when a change moves the numbers).
 - The code and docs are in English. The project is also a portfolio piece, so keep code, tests and README quality high.

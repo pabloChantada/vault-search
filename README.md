@@ -2,17 +2,19 @@
 
 [![CI](https://github.com/pabloChantada/vault-search/actions/workflows/ci.yml/badge.svg)](https://github.com/pabloChantada/vault-search/actions/workflows/ci.yml)
 
-**A simple TUI to serach your Obsidian vaults.**
+**A simple TUI to search your Obsidian vaults.**
 
-Instead of using an Obisidan plugin I wanted to have a more personalized experience; so I decided to create a simple TUI to search my own notes and continue to customize it as im using it.
+Instead of using an Obsidian plugin I wanted to have a more personalized experience, so I decided to create a simple TUI to search my own notes and continue to customize it as I'm using it.
 
-The idea is to follow a RAG-like structure where the notes are indexed locally, keeps the index up to date while modifing the files, and gives you three ways to search:
+The idea is to follow a RAG-like structure where the notes are indexed locally, keeps the index up to date while modifying the files, and gives you three ways to search:
 
 - a **TUI** with live results and a note preview,
-- a **CLI** for one-off searches and scripting (mostly for quick searches and debuggin, won't use it most likely)
+- a **CLI** for one-off searches and scripting (mostly for quick searches and debugging, won't use it most likely)
 - an **MCP server**, so Claude (or any MCP client) can search and read your notes for you.
 
-Everything runs **locally**, at the moment I don't plan to implement any type of LLM content outside the MCP server. Since I can't reallly run a "real" LLM (at least 27b even with quantization); but can be a good implementation in the future.
+It's built to be **fast**: a search takes ~6 ms, so results follow every keystroke, and the first results show up about a second and a half after launch ([numbers](docs/performance.md)).
+
+Everything runs **locally**, at the moment I don't plan to implement any type of LLM content outside the MCP server. Since I can't really run a "real" LLM (at least 27b even with quantization); but can be a good implementation in the future.
 
 ![vaultsearch searching a vault](docs/images/tui-search.svg)
 
@@ -72,7 +74,7 @@ uv sync
 uv run vaultsearch --vault "/path/to/your/vault"
 ```
 
-The first run downloads the embedding model (about 220 MB, once) and indexes the whole vault. A few hundred notes take well under a minute on a CPU, **DISCLAIMER: I HAVEN'T TRIED IN A REALLY BIG VAULT, at the moment it works for my personal use. Can be optimized in the future**. After that, only notes that changed since last time are re-read.
+The first run downloads the embedding model (about 220 MB, once) and indexes the whole vault. A few hundred notes take about a minute and a half on a CPU (I haven't tried a really big vault yet). After that, only notes that changed since last time are re-read.
 
 To avoid typing `--vault` every time, set an environment variable:
 
@@ -107,15 +109,9 @@ vaultsearch map --open                 # map of the vault in its own window
 
 ### Vault map
 
-`vaultsearch map` writes a single HTML page (three.js, loaded from a CDN) that draws your vault. Notes are placed by meaning: each one is the mean of its chunk embeddings, projected with UMAP, so notes about similar things end up together.
+`vaultsearch map --open` (or `m` in the TUI) draws your vault as a Chinese mountain-and-water landscape (山水), in a window of its own. Notes are placed by meaning, so each mountain is a cluster of related notes: the more notes a subject has, the higher it stands, and its peaks are your most-linked notes. Brush-drawn trails join clusters linked by `[[links]]`.
 
-The vault is painted as a Chinese mountain-and-water landscape (山水). Each mountain is a cluster of related notes, laid out on a 2D UMAP of the embeddings: the more notes a subject has, the higher it stands, and its peaks are your most-linked notes. Mist separates near, middle and far ranges, and ink follows the form of the land (outlines heavier at the base, fine strokes down the slopes). Notes are moss dots, pale when you haven't touched them in a while. Brush-drawn trails join clusters linked by `[[links]]`. On first load the painting draws itself in about 7 seconds, in the order the notes were written. You can switch between four classic viewpoints, from above to a high-distance view. Selecting a note draws its links in vermilion.
-
-It has search (`/`), folder toggles, and a panel with the note's links and a button to open it in Obsidian. It respects `prefers-reduced-motion`. When a note was written comes from its frontmatter (`created`, `date`…), a `YYYY-MM-DD` in its title (daily notes), or the file's creation time, in that order.
-
-The projection uses UMAP (cosine) when `umap-learn` is installed (`uv sync --extra viz`) and PCA otherwise. The map is an extra: nothing in it touches the indexer or the MCP server.
-
-`m` in the TUI (or `map --open`) draws the map next to the index in `~/.vaultsearch/` and shows it in a window of its own: a Chromium browser in app mode (`--app`), with no tabs or address bar and its own small profile, so it doesn't land as a tab in your browser. Edge ships with Windows, so the window is always there; on macOS and Linux it uses Chrome, Chromium, Brave or Edge if one is installed, and falls back to your default browser if none is. Without `--open`, `map` writes `vault-map.html` in the current folder, as before.
+It has search (`/`), folder toggles, and a panel with each note's links and a button to open it in Obsidian. Install `uv sync --extra viz` for a UMAP layout (PCA otherwise) and `--extra window` for a native window. Without `--open`, `map` writes `vault-map.html` in the current folder.
 
 ---
 
@@ -148,36 +144,6 @@ While Claude Desktop is open, the server keeps watching your vault, just like th
 
 ---
 
-## How it works
-
-```
-Obsidian saves a note ─► watchdog ─► debounce (2 s)
-                                        │
-                                        ▼
-                   split into chunks by heading and paragraph
-                                        │  each chunk is hashed
-                     ┌──────────────────┴──────────────────┐
-              unchanged chunk                         new chunk
-              (keeps its vector)              fastembed ─► vector
-                     └──────────────────┬──────────────────┘
-                                        ▼
-        one SQLite file: notes · chunks · FTS5 keyword index · sqlite-vec vectors
-
-query ─► BM25 keyword search  ┐
-      └► vector similarity    ┴─► Reciprocal Rank Fusion ─► max 2 chunks per note
-```
-
-A few decisions worth explaining:
-
-- **Hybrid search.** Embeddings find notes by meaning ("how was I studying" finds "review routine"), but they're bad at names and exact terms. BM25 is the opposite. Merging both rankings with Reciprocal Rank Fusion gets you the best of each, with no score tuning.
-- **Incremental indexing.** Every chunk is hashed. Edit one paragraph and only that paragraph gets re-embedded. Renaming or moving a note re-embeds nothing.
-- **Batched full builds.** A full index build gathers new chunks across many notes, sorts them by length (each ONNX batch is padded to its longest text) and embeds and writes them in large batches, one transaction each.
-- **The index lives outside the vault** (`~/.vaultsearch/`). If your vault syncs through iCloud or OneDrive, a database file inside it would get synced mid-write and eventually corrupted.
-- **A safety-net rescan.** Cloud-synced folders don't always fire file events reliably, so the watcher also does a cheap full rescan every 10 minutes. It only compares modification times, so it costs almost nothing.
-- **Local, multilingual embeddings.** The default model (`paraphrase-multilingual-MiniLM-L12-v2`, via ONNX) handles English, Spanish, Japanese and dozens more, runs on CPU and needs no API key.
-
----
-
 ## Configuration
 
 | Variable              | Default                                   |                                                                                                                          |
@@ -198,40 +164,10 @@ uv run pytest
 
 The tests use a tiny fake embedder, so they run offline in a few seconds. That includes one that drives the TUI headlessly.
 
-### Benchmarking the indexer
+The technical details live in `docs/`:
 
-`scripts/bench_index.py` builds the index from scratch into a throwaway database (your real index is untouched), then runs a warm sync where nothing changed. It reports notes/s and how the time splits between parsing, embedding, SQLite writes and file reads:
-
-```bash
-uv run python scripts/bench_index.py --vault "<path>"            # add --json for raw numbers
-uv run scalene run scripts/bench_index.py --- --vault "<path>"   # Python vs native time, memory; then `scalene view`
-sudo uv run py-spy record -o index.svg -- python scripts/bench_index.py --vault "<path>"   # flame graph
-```
-
-Flags `--embed-batch`, `--index-batch` and `--threads` override the config for a run.
-
-#### Results
-
-Cold build of a real vault (417 notes, ~6,400 chunks, avg 438 chars) on a Windows laptop CPU (onnxruntime default thread count):
-
-| ONNX batch | index batch | embed (s) | chunks/s |
-| ---------: | ----------: | --------: | -------: |
-| 1          | 512         | 96.5      | 65.5     |
-| **8**      | **512**     | **80.8**  | **78.1** |
-| 8          | 128         | 81.3      | 77.6     |
-| 16         | 512         | 86.8      | 72.7     |
-| 32         | 512         | 111.6     | 56.5     |
-| 64         | 256         | 148.0     | 43.0     |
-
-What it shows:
-
-- **Embedding is ~98% of the time.** File reads, parsing and SQLite writes add up to ~1.5 s, so the indexer isn't I/O-bound, and moving the Python glue to another language wouldn't help: the hot loop already runs inside onnxruntime (C++).
-- **ONNX batch size follows a U-curve.** At batch 1 you lose vectorisation and pay per-call overhead. Above 8, padding and larger attention matrices (which grow with sequence length squared) cost more than batching saves. Texts are sorted by length before batching, which keeps padding low.
-- **Index batch doesn't matter.** 128 and 512 perform the same, so it only trades fewer SQLite transactions against memory.
-- **Threads: physical cores win.** On a 12-core / 24-thread CPU (batch 8): 4 threads → 131 s, 12 → 88 s, default ≈ 81 s. Going past the logical thread count (32) slows to a crawl from oversubscription. The default is left to onnxruntime; incremental edits embed only a few chunks, so capping threads buys little.
-- A warm sync (nothing changed) takes ~0.2 s, mostly reading and hashing files.
-
-Further speed-ups (an int8-quantised model, shorter chunks, multi-process `parallel=`, GPU) would each cost retrieval quality, RAM or a heavy dependency. For an index that is built once and then updated incrementally, that isn't worth it.
+- [Architecture](docs/architecture.md): how indexing, search, startup, the reader and the map work, and why.
+- [Performance](docs/performance.md): the benchmark scripts and their results.
 
 ## Known limitations
 
