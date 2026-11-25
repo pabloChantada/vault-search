@@ -112,6 +112,8 @@ import { UnrealBloomPass } from "three/addons/postprocessing/UnrealBloomPass.js"
 import { OutputPass } from "three/addons/postprocessing/OutputPass.js";
 import { CSS2DRenderer, CSS2DObject } from "three/addons/renderers/CSS2DRenderer.js";
 
+// In the native window (viz/native.py) WebView2 won't follow obsidian:// links: Python opens them
+const openUri = (uri) => window.pywebview?.api ? window.pywebview.api.open_note(uri) : (location.href = uri);
 const DATA = /*__DATA__*/null;
 const nodes = DATA.nodes, links = DATA.links, N = nodes.length;
 const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -546,7 +548,7 @@ function deselect() {
   paint();
 }
 $("p-open").onclick = () => {
-  if (selected >= 0) location.href = `obsidian://open?vault=${encodeURIComponent(DATA.vault)}&file=${encodeURIComponent(nodes[selected].path)}`;
+  if (selected >= 0) openUri(`obsidian://open?vault=${encodeURIComponent(DATA.vault)}&file=${encodeURIComponent(nodes[selected].path)}`);
 };
 document.querySelector("#panel .close").onclick = deselect;
 

@@ -169,6 +169,8 @@ import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 
 const BOOT0 = performance.now();
+// In the native window (viz/native.py) WebView2 won't follow obsidian:// links: Python opens them
+const openUri = (uri) => window.pywebview?.api ? window.pywebview.api.open_note(uri) : (location.href = uri);
 const DATA = /*__DATA__*/null;
 const $ = id => document.getElementById(id);
 // the template opened as is (no export yet) has DATA null: it shows the empty vault, not a stack trace
@@ -2247,7 +2249,7 @@ function paintVault() {
     buildOverlay(); updateEmphasis();
   }
   $("p-open").onclick = () => {
-    if (ui.selected >= 0) location.href = `obsidian://open?vault=${encodeURIComponent(VAULT_NAME)}&file=${encodeURIComponent(nodes[ui.selected].path)}`;
+    if (ui.selected >= 0) openUri(`obsidian://open?vault=${encodeURIComponent(VAULT_NAME)}&file=${encodeURIComponent(nodes[ui.selected].path)}`);
   };
   document.querySelector("#panel .close").onclick = deselect;
 

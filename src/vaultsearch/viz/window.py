@@ -68,7 +68,24 @@ def app_window_command(browser: str, page: Path, profile: Path, size: tuple[int,
 
 
 def open_window(page: Path, profile: Path) -> str:
-    """Show `page` in an app window if possible, else in a browser tab. Returns how it was shown."""
+    """Show `page` in a window of its own, the best way available. Returns how it was shown:
+
+    "reloaded" (the native map window was already open and redraws in place), "native"
+    (a new pywebview window, see viz/native.py), "window" (a Chromium app-mode window) or
+    "browser" (a plain tab).
+    """
+    from . import native
+
+    if native.available():
+        if native.is_open(profile):
+            return "reloaded"  # it watches the page and redraws as soon as the file changes
+        try:
+            profile.mkdir(parents=True, exist_ok=True)
+            native.launch(page, profile)
+            return "native"
+        except OSError as e:
+            log.warning("Could not start the map window (%s); trying a browser window", e)
+
     browser = find_chromium()
     if browser:
         profile.mkdir(parents=True, exist_ok=True)

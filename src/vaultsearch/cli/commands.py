@@ -178,13 +178,13 @@ def cmd_watch(cfg: Config) -> None:
 def cmd_map(cfg: Config, out: str | None, method: str, theme: str, sync: bool, open_browser: bool) -> None:
     from pathlib import Path
 
-    from ..viz import build_graph, map_page, open_window, window_profile, write_html
+    from ..viz import build_graph, layout_cache, map_page, open_window, window_profile, write_html
 
     engine = _open_engine(cfg)
     if sync:
         _sync_with_progress(engine)
     with err.status(f"[{DIM}]Projecting notes to 3D…[/]", spinner="dots"):
-        graph = build_graph(engine.store, method)
+        graph = build_graph(engine.store, method, cache=layout_cache(cfg.db_path))
     if out:
         target = Path(out).expanduser().resolve()
     else:  # a map only meant to be looked at goes next to the index, not into the working directory

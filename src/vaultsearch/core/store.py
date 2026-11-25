@@ -1,6 +1,7 @@
 """Single-file SQLite store: metadata + FTS5 (keywords) + sqlite-vec (vectors)."""
 from __future__ import annotations
 
+import hashlib
 import json
 import sqlite3
 import struct
@@ -226,10 +227,26 @@ class Store:
             ).fetchall()
             return [r["path"] for r in rows]
 
+    def notes(self) -> list[sqlite3.Row]:
+        """Every note's metadata, ordered by path."""
+        with self.lock:
+            return self.db.execute("SELECT path, title, tags, links, mtime, created FROM files ORDER BY path").fetchall()
+
+    def embedding_fingerprint(self) -> str:
+        """A digest that changes exactly when some note's chunks (and so its embeddings) change.
+
+        Edits that keep every chunk, like touching a file or changing only its tags, leave it as is.
+        """
+        h = hashlib.sha1()
+        with self.lock:
+            for r in self.db.execute("SELECT path, hash FROM chunks ORDER BY path, hash"):
+                h.update(f"{r['path']}\0{r['hash']}\n".encode())
+        return h.hexdigest()
+
     def note_embeddings(self) -> tuple[list[sqlite3.Row], dict[str, list[bytes]]]:
         """All notes plus their chunks' packed float32 embeddings, grouped by note path."""
         with self.lock:
-            files = self.db.execute("SELECT path, title, tags, links, mtime, created FROM files ORDER BY path").fetchall()
+            files = self.notes()
             paths = {r["id"]: r["path"] for r in self.db.execute("SELECT id, path FROM chunks")}
             vecs: dict[str, list[bytes]] = {}
             for r in self.db.execute("SELECT rowid, embedding FROM vec_chunks"):
