@@ -28,4 +28,5 @@ Hybrid search over an Obsidian vault (the owner's "SecondBrain", stored in iClou
 - Think about Windows: paths, iCloud locking files while it syncs, and `os.startfile`.
 - Tests use `embedder="hash"` (no network). Run them with `uv run pytest`.
 - Changed how the TUI looks? Regenerate the README's screenshots with `uv run python scripts/screenshots.py`.
+- The README is for people using the tool. Technical details go in `docs/architecture.md`, and measurements in `docs/performance.md` (update them when a change moves the numbers).
 - The code and docs are in English. The project is also a portfolio piece, so keep code, tests and README quality high.
