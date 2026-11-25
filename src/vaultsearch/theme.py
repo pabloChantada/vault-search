@@ -2,7 +2,7 @@
 
 The CLI prints into whatever terminal the user has, so it keeps a palette that reads on a dark
 background. The TUI paints its own background, so it borrows the ink-on-paper palette of the
-3D map (viz/themes/sansui.html): `PAPER` by day, `NIGHT` for dark rooms. Keep these in sync with
+3D map (viz/sansui.html): `PAPER` by day, `NIGHT` for dark rooms. Keep these in sync with
 `tui/styles.tcss`, which only refers to them through Textual theme variables.
 """
 
@@ -12,7 +12,6 @@ PATH = "#F2B66D"  # amber: note paths
 DIM = "#9AA0A6"  # secondary text
 NEW = "#A5B4FC"  # new notes / summaries
 DELETED = "#F9A8D4"  # removed notes / errors
-BACKGROUND = "#0F1115"
 
 # ---------- TUI (the map's sansui palette) ----------
 PAPER = {

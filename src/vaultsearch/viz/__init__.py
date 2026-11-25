@@ -1,7 +1,7 @@
 """3D map of the vault: one point per note, placed by embedding similarity, joined by [[links]]."""
 from pathlib import Path
 
-from .map3d import DEFAULT_THEME, available_themes, build_graph, project, warm_layout, write_html
+from .map3d import build_graph, project, warm_layout, write_html
 from .window import open_window
 
 
@@ -21,6 +21,6 @@ def window_profile(db_path: Path) -> Path:
 
 
 __all__ = [
-    "DEFAULT_THEME", "available_themes", "build_graph", "layout_cache", "map_page", "open_window", "project",
-    "warm_layout", "window_profile", "write_html",
+    "build_graph", "layout_cache", "map_page", "open_window", "project", "warm_layout", "window_profile",
+    "write_html",
 ]

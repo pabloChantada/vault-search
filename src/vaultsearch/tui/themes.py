@@ -56,14 +56,6 @@ def _theme(name: str, p: dict[str, str], dark: bool) -> Theme:
             "link-color-hover": p["vermilion"],
             "link-background-hover": p["washi_deep"],
             "screen-selection-background": f"{p['vermilion']} 25%",
-            "markdown-h1-text-style": "bold",
-            "markdown-h2-text-style": "bold",
-            "markdown-h1-color": p["sumi"],
-            "markdown-h2-color": p["sumi"],
-            "markdown-h3-color": p["ai"],
-            "markdown-h4-color": p["ai"],
-            "markdown-h5-color": p["ash"],
-            "markdown-h6-color": p["ash"],
         },
     )
 

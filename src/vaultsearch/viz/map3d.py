@@ -1,4 +1,7 @@
-"""Project note embeddings to 3D and render them as a self-contained three.js page.
+"""Lay note embeddings out on a plane and render them as a self-contained three.js page.
+
+The page (sansui.html) paints the vault as an ink landscape: the 2D layout is where each note
+sits on the paper, and the page raises the mountains from it.
 
 Each note is the mean of its chunk embeddings. UMAP (cosine) keeps local neighbourhoods,
 so related notes cluster; without the optional `umap-learn` dependency it falls back to
@@ -24,29 +27,27 @@ import numpy as np
 from ..core.store import Store
 
 log = logging.getLogger("vaultsearch")
-THEMES_DIR = Path(__file__).with_name("themes")
-DEFAULT_THEME = "sansui"
-LAYOUT_VERSION = 1  # bump when the cached layout's format or meaning changes
+TEMPLATE = Path(__file__).with_name("sansui.html")
+LAYOUT_VERSION = 2  # bump when the cached layout's format or meaning changes (2: 2D only)
 _BUILD_LOCK = threading.Lock()
 
 
-def _pca(x: np.ndarray) -> np.ndarray:
+def _pca(x: np.ndarray, dims: int) -> np.ndarray:
     x = x - x.mean(axis=0)
     _, _, vt = np.linalg.svd(x, full_matrices=False)
-    out = x @ vt[:3].T
-    if out.shape[1] < 3:  # fewer notes/dims than 3
-        out = np.pad(out, ((0, 0), (0, 3 - out.shape[1])))
+    out = x @ vt[:dims].T
+    if out.shape[1] < dims:  # fewer notes/dims than asked for
+        out = np.pad(out, ((0, 0), (0, dims - out.shape[1])))
     return out
 
 
 def project(
-    vectors: np.ndarray, method: str = "auto", seed: int = 42, dims: int = 3, init: np.ndarray | None = None
+    vectors: np.ndarray, method: str = "auto", seed: int = 42, dims: int = 2, init: np.ndarray | None = None
 ) -> tuple[np.ndarray, str]:
     """Reduce (n, d) vectors to (n, dims), centred and scaled to [-1, 1]. Returns (coords, method used).
 
-    Fit 2D and 3D separately rather than dropping an axis: clusters that are apart only in the
-    dropped dimension would otherwise land on top of each other. `init` (n, dims) seeds UMAP with
-    a previous layout so the map stays recognisable between builds; PCA ignores it.
+    `init` (n, dims) seeds UMAP with a previous layout so the map stays recognisable between
+    builds; PCA ignores it.
     """
     n = len(vectors)
     if n == 0:
@@ -67,7 +68,7 @@ def project(
         )
         coords = reducer.fit_transform(vectors)
     else:
-        coords = _pca(vectors)[:, :dims]
+        coords = _pca(vectors, dims)
     coords = coords - coords.mean(axis=0)
     scale = np.abs(coords).max() or 1.0
     return (coords / scale).astype(np.float32), method
@@ -132,13 +133,13 @@ def _write_layout(path: Path, data: dict[str, Any]) -> None:
         log.warning("Could not save the map layout (%s); it will be recomputed next time", e)
 
 
-def _layout(store: Store, method: str, cache: Path | None) -> tuple[list, dict[str, list], dict[str, list], str]:
-    """Rows of the notes on the map plus their 3D and 2D positions, from the cache when it's fresh."""
+def _layout(store: Store, method: str, cache: Path | None) -> tuple[list, dict[str, list], str]:
+    """Rows of the notes on the map plus their positions, from the cache when it's fresh."""
     fingerprint = store.embedding_fingerprint() if cache else None  # read first: a later edit then misses
     previous = _read_layout(cache) if cache else None
     if previous and previous["fingerprint"] == fingerprint and previous["requested"] == method:
         rows = [f for f in store.notes() if f["path"] in previous["pos"]]
-        return rows, previous["pos"], previous["pos2"], previous["method"]
+        return rows, previous["pos"], previous["method"]
 
     t0 = time.perf_counter()
     files, packed = store.note_embeddings()
@@ -154,20 +155,17 @@ def _layout(store: Store, method: str, cache: Path | None) -> tuple[list, dict[s
     matrix = np.array(vecs, dtype=np.float32).reshape(len(vecs), -1)
     paths = [f["path"] for f in rows]
     same = previous is not None and previous["requested"] == method
-    coords, used = project(matrix, method, init=_seed(matrix, paths, previous["pos"], 3) if same else None)
-    # Ground plane for flat and landscape themes
-    coords2, _ = project(matrix, used, dims=2, init=_seed(matrix, paths, previous["pos2"], 2) if same else None)
+    coords, used = project(matrix, method, init=_seed(matrix, paths, previous["pos"], 2) if same else None)
     if same:
-        coords, coords2 = _align(coords, paths, previous["pos"]), _align(coords2, paths, previous["pos2"])
-    pos = {p: [round(float(c), 4) for c in xyz] for p, xyz in zip(paths, coords)}
-    pos2 = {p: [round(float(c), 4) for c in xy] for p, xy in zip(paths, coords2)}
+        coords = _align(coords, paths, previous["pos"])
+    pos = {p: [round(float(c), 4) for c in xy] for p, xy in zip(paths, coords)}
     log.info("Map layout: %d notes placed with %s in %.1fs", len(paths), used.upper(), time.perf_counter() - t0)
     if cache:
         _write_layout(cache, {
             "version": LAYOUT_VERSION, "fingerprint": fingerprint, "requested": method, "method": used,
-            "pos": pos, "pos2": pos2,
+            "pos": pos,
         })
-    return rows, pos, pos2, used
+    return rows, pos, used
 
 
 def warm_layout(store: Store, cache: Path, method: str = "auto") -> None:
@@ -182,7 +180,7 @@ def build_graph(store: Store, method: str = "auto", cache: Path | None = None) -
     With `cache`, positions are reused while no note's embeddings have changed (see `warm_layout`).
     """
     with _BUILD_LOCK:  # a background warm-up and an open request never fit UMAP twice
-        rows, pos, pos2, used = _layout(store, method, cache)
+        rows, pos, used = _layout(store, method, cache)
 
     # Links point at note titles ([[Kanji]]) or paths ([[Japanese/Kanji]]); resolve both case-insensitively
     index: dict[str, int] = {}
@@ -203,26 +201,18 @@ def build_graph(store: Store, method: str = "auto", cache: Path | None = None) -
             "folder": _folder(f["path"]),
             "tags": json.loads(f["tags"]),
             "mtime": f["mtime"],  # last edit: how fresh the ink is
-            "created": f["created"],  # when it was written: height in the tree
+            "created": f["created"],  # when it was written: the order the painting draws itself in
             "pos": pos[f["path"]],
-            "pos2": pos2[f["path"]],
         }
         for f in rows
     ]
-    log.info("3D map: %d notes, %d links (%s)", len(nodes), len(edges), used)
+    log.info("Map: %d notes, %d links (%s)", len(nodes), len(edges), used)
     return {"method": used, "nodes": nodes, "links": sorted(edges)}
 
 
-def available_themes() -> list[str]:
-    """Each theme is one self-contained HTML page in viz/themes/."""
-    return sorted(p.stem for p in THEMES_DIR.glob("*.html"))
-
-
-def write_html(graph: dict[str, Any], out: Path, vault_name: str, theme: str = DEFAULT_THEME) -> Path:
-    template = THEMES_DIR / f"{theme}.html"
-    if not template.is_file():
-        raise ValueError(f"Unknown theme {theme!r}; available: {', '.join(available_themes())}")
+def write_html(graph: dict[str, Any], out: Path, vault_name: str) -> Path:
+    """The map page with `graph` (and the vault's name, for obsidian:// links) baked in."""
     data = json.dumps({**graph, "vault": vault_name}, ensure_ascii=False).replace("</", "<\\/")
-    html = template.read_text(encoding="utf-8").replace("/*__DATA__*/null", data)
+    html = TEMPLATE.read_text(encoding="utf-8").replace("/*__DATA__*/null", data)
     out.write_text(html, encoding="utf-8")
     return out

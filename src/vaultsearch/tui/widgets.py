@@ -13,6 +13,7 @@ from rich.style import Style
 from textual import events
 from textual.app import ComposeResult
 from textual.binding import Binding
+from textual.content import Content, Span
 from textual.geometry import Size
 from textual.markup import escape
 from textual.scroll_view import ScrollView
@@ -38,29 +39,26 @@ def open_with_system(path: Path) -> None:
                          stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
 
-def mark_words(text: str, words: list[str]) -> str:
-    """Escape `text` as Textual markup and set the query words in the seal colour."""
+def mark_words(text: str, words: list[str]) -> Content:
+    """`text` with the query words set in the seal colour.
+
+    Spans over plain text rather than markup: a note's own brackets ([[Kanji]], [b]) stay text.
+    """
     words = [w for w in words if w]
     if not words:
-        return escape(text)
+        return Content(text)
     pattern = re.compile("|".join(re.escape(w) for w in sorted(words, key=len, reverse=True)), re.IGNORECASE)
-    out, last = [], 0
-    for m in pattern.finditer(text):
-        out.append(escape(text[last:m.start()]))
-        out.append(f"[b $seal]{escape(m.group())}[/]")
-        last = m.end()
-    out.append(escape(text[last:]))
-    return "".join(out)
+    return Content(text, spans=[Span(m.start(), m.end(), "b $seal") for m in pattern.finditer(text)])
 
 
 class ResultItem(ListItem):
     """A note in the results: its title, where it lives, and a line of what matched."""
 
-    def __init__(self, path: str, heading: str = "", body: str = ""):
+    def __init__(self, path: str, heading: str = "", body: Content | str = ""):
         super().__init__()
         self.path = path
         self.heading = heading
-        self._body = body  # already markup (see mark_words)
+        self._body = body  # see mark_words
 
     def compose(self) -> ComposeResult:
         p = PurePosixPath(self.path)
@@ -68,9 +66,7 @@ class ResultItem(ListItem):
         if self.heading:
             heading = self.heading.replace(" > ", " › ")
             where = f"{where} › {heading}" if where else heading
-        head = f"[b $ink]{escape(p.stem)}[/]"
-        if where:
-            head += f"  [$ai]{escape(where)}[/]"
+        head = Content.assemble((p.stem, "b $ink"), *(("  ", (where, "$ai")) if where else ()))
         yield Static(head, classes="r-head")
         if self._body:
             yield Static(self._body, classes="r-body")

@@ -26,4 +26,5 @@ Hybrid search over an Obsidian vault (the owner's "SecondBrain", stored in iClou
 - Logs always go to stderr. In `serve`, stdout is the MCP channel. In the TUI, logs are routed to the watcher panel.
 - Think about Windows: paths, iCloud locking files while it syncs, and `os.startfile`.
 - Tests use `embedder="hash"` (no network). Run them with `uv run pytest`.
+- Changed how the TUI looks? Regenerate the README's screenshots with `uv run python scripts/screenshots.py`.
 - The code and docs are in English. The project is also a portfolio piece, so keep code, tests and README quality high.

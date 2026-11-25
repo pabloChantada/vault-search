@@ -85,6 +85,7 @@ class VaultSearchApp(App):
         self._last_query = ""
         self._map_busy = False
         self._map_stop = threading.Event()  # stops the map warm-up thread
+        self._items: list[ListItem] = []  # what the results list holds now (see _on_highlighted)
         self._focus_when_found = False
         for theme in THEMES:
             self.register_theme(theme)
@@ -316,6 +317,7 @@ class VaultSearchApp(App):
 
     def _fill_results(self, items: list[ListItem], summary: str) -> None:
         results = self.query_one("#results", ResultList)
+        self._items = items
         results.clear()
         if items:
             results.extend(items)
@@ -331,7 +333,9 @@ class VaultSearchApp(App):
     # ---------- the note ----------
     @on(ResultList.Highlighted, "#results")
     def _on_highlighted(self, event: ResultList.Highlighted) -> None:
-        if isinstance(event.item, ResultItem):
+        # clear() removes the old items later, so setting the index right after it can announce
+        # one of them: ignore it, or the note of a previous search would replace the new one
+        if isinstance(event.item, ResultItem) and event.item in self._items:
             self.load_preview(event.item.path, event.item.heading)
 
     def load_preview(self, rel: str, heading: str) -> None:
