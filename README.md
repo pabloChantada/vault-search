@@ -12,7 +12,7 @@ The idea is to follow a RAG-like structure where the notes are indexed locally, 
 
 Everything runs **locally**, at the moment I don't plan to implement any type of LLM content outside the MCP server. Since I can't reallly run a "real" LLM (at least 27b even with quantization); but can be a good implementation in the future.
 
-![vaultsearch searching a vault](docs/images/tui-search.png)
+![vaultsearch searching a vault](docs/images/tui-search.svg)
 
 ---
 
@@ -28,11 +28,11 @@ Every time you save a note in Obsidian, the status line flashes it being re-inde
 
 `?` shows every key on one sheet. `ctrl+p` lists the commands, and the ones that need a word can also be typed with a `/`:
 
-![slash commands](docs/images/tui-commands.png)
+![slash commands](docs/images/tui-commands.svg)
 
 `/recent` lists what you touched lately. `/folder Japanese` or `/tag journal` narrows every search until you turn it off:
 
-![recently modified notes](docs/images/tui-recent.png)
+![recently modified notes](docs/images/tui-recent.svg)
 
 ### Keys
 
