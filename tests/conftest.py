@@ -31,3 +31,20 @@ def engine(vault: Path, tmp_path: Path) -> Engine:
     e = Engine(cfg)
     yield e
     e.stop()
+
+
+@pytest.fixture
+def note_ready():
+    """`await note_ready(pilot, view)`: wait until the reader shows the note last asked for.
+
+    Rendering runs in a thread after a short debounce, and slow CI runners (Windows) need longer
+    than a fixed pause, so tests wait for the page instead of sleeping."""
+
+    async def wait(pilot, view, timeout: float = 10.0) -> None:
+        for _ in range(int(timeout / 0.05)):
+            await pilot.pause(0.05)
+            if view.ready:
+                return
+        raise AssertionError("the note never finished rendering")
+
+    return wait

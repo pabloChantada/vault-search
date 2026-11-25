@@ -61,7 +61,8 @@ class VaultFiles:
                 for name in names:
                     if (rel := self._lookup(name)) is not None:
                         return self.vault / rel
-                if attempt == 0 and time.monotonic() - self._built > self.stale_s:
+                # >=, not >: Windows' clock ticks every ~16 ms, so with stale_s=0 the gap can read as 0
+                if attempt == 0 and time.monotonic() - self._built >= self.stale_s:
                     self._build()  # maybe the file is new: look again once, then give up
                 else:
                     break

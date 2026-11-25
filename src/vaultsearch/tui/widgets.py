@@ -146,12 +146,18 @@ class NoteView(ScrollView, can_focus=True):
         self.files: VaultFiles | None = None  # set by the app: resolves [[links]] and ![[images]]
         self.page = Page([], [], 0)
         self._source: tuple = ("text", "", "")  # ("text", markdown, "") or ("file", path, heading)
+        self._shown: tuple | None = None  # the source of the page on screen; lags _source while rendering
         self._timer: Timer | None = None
         self._history: list[tuple[Path, int]] = []  # notes left by following a link: (path, line)
         self._hints: dict[str, tuple[int, int, int]] | None = None  # key -> (line, x, target)
 
     def on_mount(self) -> None:
         self.watch(self.app, "theme", lambda: self._rerender(keep_scroll=True), init=False)
+
+    @property
+    def ready(self) -> bool:
+        """Whether the page on screen is the one last asked for (and not still rendering)."""
+        return self._shown == self._source
 
     # ---------- what to show ----------
     def _look(self) -> tuple[int, str, dict[str, str], bool]:
@@ -165,6 +171,7 @@ class NoteView(ScrollView, can_focus=True):
         self._source = ("text", markdown, "")
         width, _, palette, dark = self._look()
         self._set_page(render(markdown, width, palette, dark))
+        self._shown = self._source
 
     def show_file(self, path: Path, heading: str = "", keep_scroll: bool = False,
                   line: int | None = None, keep_history: bool = False) -> None:
@@ -178,6 +185,7 @@ class NoteView(ScrollView, can_focus=True):
         page = self.cache.get(self.cache.key(path, width, theme))
         if page is not None:
             self._set_page(page, heading, keep_scroll, line)
+            self._shown = self._source
             return
         source = self._source
         self._timer = self.set_timer(
@@ -209,6 +217,7 @@ class NoteView(ScrollView, can_focus=True):
     def _arrive(self, source: tuple, page: Page, keep_scroll: bool, line: int | None) -> None:
         if source == self._source:  # else the selection moved while this rendered
             self._set_page(page, source[2], keep_scroll, line)
+            self._shown = source
 
     def _cancel_pending(self) -> None:
         if self._timer is not None:
