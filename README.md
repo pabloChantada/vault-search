@@ -1,5 +1,7 @@
 # VaultSearch
 
+[![CI](https://github.com/pabloChantada/vault-search/actions/workflows/ci.yml/badge.svg)](https://github.com/pabloChantada/vault-search/actions/workflows/ci.yml)
+
 **A simple TUI to serach your Obsidian vaults.**
 
 Instead of using an Obisidan plugin I wanted to have a more personalized experience; so I decided to create a simple TUI to search my own notes and continue to customize it as im using it.
