@@ -5,6 +5,7 @@ import logging
 import os
 import subprocess
 import sys
+import threading
 import time
 import webbrowser
 from collections import deque
@@ -21,11 +22,13 @@ from textual.markup import escape
 from textual.screen import Screen
 from textual.suggester import SuggestFromList
 from textual.timer import Timer
-from textual.widgets import Input, ListItem, Markdown, Static
+from textual.widgets import Input, ListItem, Static
 
 from ..core import Config, Engine, Hit
-from ..core.text import preview_markdown, query_words, snippet
+from ..core.links import VaultFiles
+from ..core.text import query_words, snippet
 from .help import COMMANDS, WELCOME_MD
+from .images import ImageScreen
 from .screens import ActivityScreen, ShortcutsScreen
 from .themes import NIGHT_THEME, PAPER_THEME, THEMES
 from .widgets import CommandItem, NoteView, ResultItem, ResultList, mark_words
@@ -33,6 +36,8 @@ from .widgets import CommandItem, NoteView, ResultItem, ResultList, mark_words
 # Keys that are also letters: they must type into the search box, not act, while it has focus
 _LETTER_ACTIONS = {"open_selected", "copy_path", "map", "shortcuts"}
 _EVENT_SHOWN_S = 8.0  # how long the latest watcher event stays in the status line
+PREFETCH_AROUND = 5  # notes rendered ahead above and below the selected result
+MAP_WARM_INTERVAL_S = 60.0  # how often the background map warm-up checks the index for changes
 
 
 class _PanelLogHandler(logging.Handler):
@@ -80,6 +85,7 @@ class VaultSearchApp(App):
         self._debounce: Timer | None = None
         self._last_query = ""
         self._map_busy = False
+        self._map_stop = threading.Event()  # stops the map warm-up thread
         self._focus_when_found = False
         for theme in THEMES:
             self.register_theme(theme)
@@ -108,7 +114,9 @@ class VaultSearchApp(App):
         engine_log.handlers[:] = [_PanelLogHandler(self)]
         engine_log.setLevel(logging.INFO)
         engine_log.propagate = False
-        self.query_one("#preview", Markdown).update(WELCOME_MD)
+        note = self.query_one("#note", NoteView)
+        note.files = VaultFiles(self.cfg.vault, self.cfg.ignore_dirs)  # indexed on the first link
+        note.show_text(WELCOME_MD)
         self.query_one("#prompt", Input).focus()
         self._refresh_scope()
         self._refresh_status()
@@ -116,6 +124,7 @@ class VaultSearchApp(App):
         self.boot()
 
     def on_unmount(self) -> None:
+        self._map_stop.set()
         self.engine.stop()
         engine_log = logging.getLogger("vaultsearch")
         engine_log.handlers[:] = []
@@ -140,12 +149,38 @@ class VaultSearchApp(App):
                               f"Initial sync: {_describe(counts)} ({time.perf_counter() - t0:.1f}s)")
         if self._last_query:
             self.call_from_thread(self.run_search, self._last_query)
+        threading.Thread(target=self._warm_map, name="vaultsearch-map", daemon=True).start()
+
+    def _warm_map(self) -> None:
+        """Keep the map's layout ready in the background, so pressing `m` opens it at once.
+
+        It refits only after the index has stopped changing for a whole interval: while a note
+        is being edited every save moves the fingerprint, and refitting on each one would waste CPU.
+        """
+        from ..viz import layout_cache, warm_layout
+
+        cache, settled = layout_cache(self.cfg.db_path), None
+        while True:
+            try:
+                fingerprint = self.engine.store.embedding_fingerprint()
+                if settled is None or fingerprint == settled:
+                    warm_layout(self.engine.store, cache)
+                settled = fingerprint
+            except Exception:  # never let a failed warm-up take the app down; `m` still works
+                logging.getLogger("vaultsearch").exception("Could not prepare the map")
+            if self._map_stop.wait(MAP_WARM_INTERVAL_S):
+                return
 
     def _on_progress(self, done: int, total: int, rel: str, status: str) -> None:
         self.progress = f"{done}/{total}"
 
     # ---------- status line ----------
     def _refresh_status(self) -> None:
+        if isinstance(self.screen, ImageScreen):
+            # Textual repaints the top screen wherever the one below changes, and a Sixel image
+            # is redrawn from blank on every repaint: ticking here made it flicker. The status
+            # catches up on the next tick after the image closes.
+            return
         seal = self.query_one("#seal", Static)
         seal.set_class(self.state != "ready", "busy")
         if self.state == "ready":
@@ -277,7 +312,7 @@ class VaultSearchApp(App):
             items.append(ResultItem(h.path, heading, mark_words(snippet(h.text, words, 160), words)))
         self._fill_results(items, f"{len(hits)} result{'s' * (len(hits) != 1)}, {ms:.0f} ms")
         if not hits:
-            self.query_one("#preview", Markdown).update(
+            self.query_one("#note", NoteView).show_text(
                 f"Nothing matches **{query}**. Try other words, or `/folder off` if a folder filter is on.")
 
     def _fill_results(self, items: list[ListItem], summary: str) -> None:
@@ -300,18 +335,19 @@ class VaultSearchApp(App):
         if isinstance(event.item, ResultItem):
             self.load_preview(event.item.path, event.item.heading)
 
-    @work(exclusive=True, group="preview")
-    async def load_preview(self, rel: str, heading: str) -> None:
-        try:
-            text = preview_markdown((self.cfg.vault / rel).read_text(encoding="utf-8", errors="replace"))
-        except OSError as e:
-            text = f"_Could not read {rel}: {e}_"
+    def load_preview(self, rel: str, heading: str) -> None:
+        """Show the note (at the section the hit came from) and render its neighbours ahead."""
         note = self.query_one("#note", NoteView)
-        await self.query_one("#preview", Markdown).update(text)
-        note.scroll_home(animate=False)
-        section = heading.split(" > ")[-1].strip() if heading else ""
-        if section:  # jump to the section the hit came from
-            note.scroll_to_section(section)
+        note.show_file(self.cfg.vault / rel, heading)
+        results = self.query_one("#results", ResultList)
+        at = results.index or 0
+        items = results.children
+        around = []
+        for step in range(1, PREFETCH_AROUND + 1):  # nearest first: the next key press lands there
+            for i in (at + step, at - step):
+                if 0 <= i < len(items) and isinstance(items[i], ResultItem):
+                    around.append(self.cfg.vault / items[i].path)
+        note.prefetch(around)
 
     # ---------- opening notes ----------
     def _selected_path(self) -> str | None:
@@ -366,17 +402,20 @@ class VaultSearchApp(App):
 
     @work(thread=True, exclusive=True, group="map")
     def open_map(self) -> None:
-        from ..viz import build_graph, map_page, open_window, window_profile, write_html
+        from ..viz import build_graph, layout_cache, map_page, open_window, window_profile, write_html
 
         try:
             if not self.engine.ready.wait(60):
                 self.call_from_thread(self.notify, "The index is not ready yet", severity="warning")
                 return
-            graph = build_graph(self.engine.store)
+            graph = build_graph(self.engine.store, cache=layout_cache(self.cfg.db_path))
             page = write_html(graph, map_page(self.cfg.db_path), self.cfg.vault.name)
             how = open_window(page, window_profile(self.cfg.db_path))
-            where = "in its own window" if how == "window" else "in your browser"
-            self.call_from_thread(self.notify, f"Map of {len(graph['nodes'])} notes opened {where}", timeout=4)
+            n = len(graph["nodes"])
+            text = f"Map of {n} notes redrawn in its window" if how == "reloaded" else (
+                f"Map of {n} notes opened " + ("in your browser" if how == "browser" else "in its own window")
+            )
+            self.call_from_thread(self.notify, text, timeout=4)
         except Exception as e:
             self.call_from_thread(self.notify, f"Could not draw the map: {e}", severity="error")
         finally:

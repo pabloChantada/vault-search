@@ -102,26 +102,12 @@ Screen {
     border-left: vkey $paper-deep;
     background: $paper;
     scrollbar-size-vertical: 1;
+    scrollbar-gutter: stable;  /* a long note must not narrow the page it was wrapped for */
 }
 
 #note:focus {
     border-left: outer $seal;
 }
-
-#preview {
-    background: $paper;
-    padding: 0;
-    margin: 0;
-}
-
-#preview MarkdownH1 {
-    content-align: left top;
-    text-align: left;
-    border-bottom: hkey $paper-deep;
-    padding: 0;
-    margin: 0 0 1 0;
-}
-
 /* ---------- status line ---------- */
 #statusbar {
     height: 1;

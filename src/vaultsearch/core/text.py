@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Callable
 
 import frontmatter
 
@@ -28,10 +29,16 @@ def snippet(text: str, words: list[str], width: int = 320) -> str:
     return ("…" if start else "") + flat[start:end].strip() + ("…" if end < len(flat) else "")
 
 
-def preview_markdown(raw: str) -> str:
+def _bold_link(m: re.Match) -> str:
+    return f"**{m.group(2) or m.group(1)}**"
+
+
+def preview_markdown(raw: str, wikilink: Callable[[re.Match], str] = _bold_link) -> str:
     """Make a note renderable by a plain Markdown viewer.
 
-    Frontmatter becomes a line of tags and [[wikilinks]] become bold text.
+    Frontmatter becomes a line of tags. [[wikilinks]] and ![[embeds]] go through `wikilink`
+    (group 1: the target, group 2: the alias, if any; the match starts with "!" for an embed),
+    which by default sets them in bold.
     """
     try:
         post = frontmatter.loads(raw)
@@ -41,6 +48,6 @@ def preview_markdown(raw: str) -> str:
     tags = meta.get("tags") or []
     if isinstance(tags, str):
         tags = [t for t in re.split(r"[,\s]+", tags) if t]
-    body = _WIKILINK_RE.sub(lambda m: f"**{m.group(2) or m.group(1)}**", body)
+    body = _WIKILINK_RE.sub(wikilink, body)
     head = ("`" + "`  `".join(f"#{str(t).lstrip('#')}" for t in tags) + "`\n\n") if tags else ""
     return head + body

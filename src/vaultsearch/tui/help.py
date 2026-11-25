@@ -29,6 +29,9 @@ SHORTCUTS: list[tuple[str, list[tuple[str, str]]]] = [
         ("space  b", "a page down, up"),
         ("g  G", "top, bottom"),
         ("]  [", "next, previous heading"),
+        ("f", "follow a link: press the letter stamped on it"),
+        ("click", "follow a link, or show an image (← → the others, o your viewer)"),
+        ("backspace", "back to the note you came from"),
         ("h  esc", "back to the results"),
     ]),
     ("Anywhere", [

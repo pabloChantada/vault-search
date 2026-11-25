@@ -61,9 +61,13 @@ def test_tui_vim_keys_move_through_results_and_note(cfg):
             note = app.query_one("#note", NoteView)
             assert app.focused is note
             await pilot.pause(0.3)
+            # The note opens at the section the hit came from ("Long > First" or "> Second"), not at the top
+            section = results.highlighted_child.heading.split(" > ")[-1]
+            section_line = dict((t, line) for line, t in note.page.headings)[section]
+            assert note.scroll_y == section_line > 0
 
             await pilot.press("j", "j")
-            assert note.scroll_y == 2
+            assert note.scroll_y == section_line + 2
             await pilot.press("ctrl+d")
             assert note.scroll_y > 2
             await pilot.press("G")
@@ -81,6 +85,66 @@ def test_tui_vim_keys_move_through_results_and_note(cfg):
             assert app.focused is results
             await pilot.press("escape")
             assert app.focused.id == "prompt"
+            await pilot.press("ctrl+q")
+
+    asyncio.run(scenario())
+
+
+def test_tui_renders_the_neighbours_ahead(cfg, vault):
+    for i in range(6):
+        (vault / f"Rain {i}.md").write_text(f"# Rain {i}\nIt rained on day {i}.\n", encoding="utf-8")
+
+    async def scenario():
+        app = VaultSearchApp(cfg)
+        async with app.run_test(size=(120, 30)) as pilot:
+            await _ready(app, pilot)
+            await pilot.press(*"rained", "enter")
+            await pilot.pause(0.8)
+            results = app.query_one("#results", ResultList)
+            note = app.query_one("#note", NoteView)
+            width, theme = note.page.width, app.theme
+            assert len(results.children) >= 4
+            for item in results.children[1:4]:  # rendered before anyone moved there
+                assert note.cache.key(vault / item.path, width, theme) in note.cache
+
+            await pilot.press("j")  # a cached note shows at once, without the render pause
+            assert "".join(s.text for s in note.page.lines).find(results.children[1].path[:-3]) >= 0
+            await pilot.press("ctrl+q")
+
+    asyncio.run(scenario())
+
+
+def test_tui_follows_links_by_key_and_click_and_goes_back(cfg, vault):
+    async def scenario():
+        app = VaultSearchApp(cfg)
+        async with app.run_test(size=(120, 30)) as pilot:
+            await _ready(app, pilot)
+            await pilot.press(*"recruiter", "enter")  # the journal entry, which links [[Kanji]]
+            await pilot.pause(0.8)
+            await pilot.press("l")
+            note = app.query_one("#note", NoteView)
+            await pilot.pause(0.3)
+            journal = note._source[1]
+            assert journal.name == "2026-11-17.md"
+
+            await pilot.press("f")  # hint mode: other keys cancel instead of acting
+            assert note._hints
+            y = note.scroll_y
+            await pilot.press("G")
+            assert note._hints is None and note.scroll_y == y
+
+            await pilot.press("f", "a")  # the only link gets the first label
+            await pilot.pause(0.3)
+            assert note._source[1].name == "Kanji.md"
+            await pilot.press("backspace")
+            await pilot.pause(0.3)
+            assert note._source[1] == journal
+
+            line, x, _, _ = note.page.links[0]  # now with the mouse
+            gutter = note.gutter  # border + padding on the left
+            await pilot.click("#note", offset=(gutter.left + x, line - round(note.scroll_y)))
+            await pilot.pause(0.3)
+            assert note._source[1].name == "Kanji.md"
             await pilot.press("ctrl+q")
 
     asyncio.run(scenario())
