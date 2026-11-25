@@ -17,6 +17,11 @@ from .vectors import VectorIndex
 
 SCHEMA_VERSION = "2"  # 2: files.created
 
+# A term in more than this share of the chunks counts as common (see Store.common_terms)
+COMMON_TERM_SHARE = 0.2
+# Below this many chunks every search is fast anyway, and shares are too noisy to judge by
+COMMON_TERM_MIN_CHUNKS = 200
+
 
 def _pack(vec: list[float]) -> bytes:
     return struct.pack(f"{len(vec)}f", *vec)
@@ -57,6 +62,7 @@ class Store:
         # In-memory copy of vec_chunks for fast KNN, loaded on the first search and kept
         # in step with every write after that (see vectors.py)
         self._vectors: VectorIndex | None = None
+        self._common: tuple[int, frozenset[str]] | None = None  # (chunk count, terms)
         self._init_schema(model_id)
 
     @contextmanager
@@ -223,11 +229,30 @@ class Store:
         rows = self.db.execute("SELECT rowid, embedding FROM vec_chunks")
         return VectorIndex.from_rows(self.dim, ((r["rowid"], r["embedding"]) for r in rows))
 
-    def warm_vectors(self) -> None:
-        """Load the in-memory vectors now, so the first search doesn't pay for it (~60 ms)."""
+    def common_terms(self) -> frozenset[str]:
+        """Indexed terms found in more than COMMON_TERM_SHARE of the chunks ("de", "the"...).
+
+        Recomputed (~40 ms) only once the number of chunks has moved by more than 5%.
+        """
+        with self.lock:
+            n = self.db.execute("SELECT COUNT(*) FROM chunks").fetchone()[0]
+            if n < COMMON_TERM_MIN_CHUNKS:
+                return frozenset()
+            if self._common is None or abs(n - self._common[0]) > 0.05 * self._common[0]:
+                # A TEMP table: a per-connection view over the FTS index, not a schema change
+                self.db.execute(
+                    "CREATE VIRTUAL TABLE IF NOT EXISTS temp.chunks_vocab USING fts5vocab(main, chunks_fts, row)"
+                )
+                rows = self.db.execute("SELECT term FROM temp.chunks_vocab WHERE doc > ?", (COMMON_TERM_SHARE * n,))
+                self._common = (n, frozenset(r["term"] for r in rows))
+            return self._common[1]
+
+    def warm(self) -> None:
+        """Load what searches keep in memory now (~100 ms), so the first search doesn't pay for it."""
         with self.lock:
             if self._vectors is None:
                 self._vectors = self._load_vectors()
+        self.common_terms()
 
     def chunks_by_ids(self, ids: list[int]) -> dict[int, sqlite3.Row]:
         if not ids:

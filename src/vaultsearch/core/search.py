@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import re
+import unicodedata
 from dataclasses import dataclass
 
 from .embedder import Embedder
@@ -32,9 +33,21 @@ class Hit:
         }
 
 
-def _fts_query(q: str) -> str:
-    # Quote every word (avoids FTS5 syntax errors), allow prefixes, OR them together
-    words = [w for w in WORD_RE.findall(q) if len(w) > 1]
+def _fold(word: str) -> str:
+    """Lowercase and strip diacritics, as the FTS5 tokenizer does to the terms it indexes."""
+    return "".join(c for c in unicodedata.normalize("NFKD", word.lower()) if not unicodedata.combining(c))
+
+
+def _fts_query(q: str, common: frozenset[str] = frozenset()) -> str:
+    """An FTS5 expression for `q`: every word quoted (no syntax errors), as a prefix, ORed.
+
+    Prefixes stand in for stemming ("árbol" finds "árboles"). Common words are dropped:
+    their IDF is close to 0, so they barely move the ranking, yet FTS5 has to score every
+    row they match ("de" is in 87% of the chunks of a Spanish vault, and made long
+    questions take 30-40 ms instead of 1-2 ms). If every word is common, they're all kept.
+    """
+    words = list({_fold(w): w for w in WORD_RE.findall(q) if len(w) > 1}.values())
+    words = [w for w in words if _fold(w) not in common] or words
     return " OR ".join(f'"{w}"*' for w in words)
 
 
@@ -47,7 +60,7 @@ class Searcher:
         pool = max(limit * 5, 40) if (folder or tag) else max(limit * 3, 20)
         ranks: dict[int, float] = {}
 
-        fts_expr = _fts_query(query)
+        fts_expr = _fts_query(query, self.store.common_terms())
         if fts_expr:
             for rank, (cid, _) in enumerate(self.store.fts_search(fts_expr, pool)):
                 ranks[cid] = ranks.get(cid, 0.0) + 1.0 / (RRF_K + rank)

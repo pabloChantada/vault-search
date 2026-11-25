@@ -36,7 +36,7 @@ class Engine:
         )
         model_id = self.cfg.embed_model if self.cfg.embedder == "fastembed" else self.cfg.embedder
         self.store = Store(self.cfg.db_path, embedder.dim, model_id)
-        self.store.warm_vectors()
+        self.store.warm()
         self.indexer = Indexer(self.cfg, self.store, embedder)
         self.searcher = Searcher(self.store, embedder)
         self.ready.set()
