@@ -459,7 +459,8 @@ class VaultSearchApp(App):
         line.display = bool(words)
         if words:
             first, *rest = (f"[@click=app.use_word('{w}')]{escape(w)}[/]" for w in words)
-            line.update(f"[$ash]→[/] [b $seal]{first}[/]  " + "  ".join(f"[$ash]{w}[/]" for w in rest))
+            # Clickable words look like the reader's links; the one → takes is in bold
+            line.update(f"[$ash]→[/] [b]{first}[/]  " + "  ".join(rest))
 
     def action_use_word(self, word: str) -> None:
         """Put `word` in place of the word being typed, and carry on typing after it."""

@@ -109,7 +109,7 @@ async def shoot(cfg: Config) -> None:
             print(OUT / f"{name}.svg")
 
         prompt = app.query_one("#prompt", Input)
-        await pilot.press(*"kanji compounds")
+        await pilot.press(*"kanji comp")  # mid-word, so the suggestions under the box show
         await save("tui-search")
         prompt.value = ""
         await pilot.press("/")
