@@ -3816,6 +3816,9 @@ source = { editable = "." }
 dependencies = [
     { name = "fastembed" },
     { name = "mcp", extra = ["cli"] },
+    { name = "numpy", version = "2.2.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.11'" },
+    { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version == '3.11.*'" },
+    { name = "numpy", version = "2.5.5", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12'" },
     { name = "python-frontmatter" },
     { name = "rich" },
     { name = "sqlite-vec" },
@@ -3847,6 +3850,7 @@ dev = [
 requires-dist = [
     { name = "fastembed", specifier = ">=0.4" },
     { name = "mcp", extras = ["cli"], specifier = ">=1.2" },
+    { name = "numpy", specifier = ">=1.24" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8" },
     { name = "python-frontmatter", specifier = ">=1.1" },
     { name = "pywebview", marker = "extra == 'window'", specifier = ">=5" },

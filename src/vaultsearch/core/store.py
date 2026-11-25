@@ -6,10 +6,14 @@ import json
 import sqlite3
 import struct
 import threading
+from collections.abc import Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 
 import sqlite_vec
+
+from .vectors import VectorIndex
 
 SCHEMA_VERSION = "2"  # 2: files.created
 
@@ -50,7 +54,22 @@ class Store:
         # The watcher and the MCP server / TUI read and write from different threads
         self.lock = threading.RLock()
         self.dim = dim
+        # In-memory copy of vec_chunks for fast KNN, loaded on the first search and kept
+        # in step with every write after that (see vectors.py)
+        self._vectors: VectorIndex | None = None
         self._init_schema(model_id)
+
+    @contextmanager
+    def _writing(self) -> Iterator[None]:
+        """A write transaction. Writes update the in-memory vectors as they go, so if the
+        transaction rolls back, drop that copy and let the next search reload it."""
+        with self.lock:
+            try:
+                with self.db:
+                    yield
+            except BaseException:
+                self._vectors = None
+                raise
 
     # ---------- schema ----------
     def _init_schema(self, model_id: str) -> None:
@@ -115,7 +134,7 @@ class Store:
 
     def write_notes(self, records: list[NoteRecord]) -> None:
         """Write several notes in a single transaction (one commit instead of one per note)."""
-        with self.lock, self.db:
+        with self._writing():
             for rec in records:
                 self._write_note(rec)
 
@@ -152,21 +171,25 @@ class Store:
                 (cid, title, heading, text),
             )
             self.db.execute("INSERT INTO vec_chunks(rowid, embedding) VALUES (?, ?)", (cid, _pack(emb)))
+            if self._vectors is not None:
+                self._vectors.add(cid, emb)
 
     def _delete_chunk(self, cid: int) -> None:
         self.db.execute("DELETE FROM chunks WHERE id=?", (cid,))
         self.db.execute("DELETE FROM chunks_fts WHERE rowid=?", (cid,))
         self.db.execute("DELETE FROM vec_chunks WHERE rowid=?", (cid,))
+        if self._vectors is not None:
+            self._vectors.remove(cid)
 
     def delete_file(self, path: str) -> None:
-        with self.lock, self.db:
+        with self._writing():
             for r in self.db.execute("SELECT id FROM chunks WHERE path=?", (path,)).fetchall():
                 self._delete_chunk(r["id"])
             self.db.execute("DELETE FROM files WHERE path=?", (path,))
 
     def rename_file(self, old: str, new: str) -> bool:
         """Move a note without re-embedding anything. Returns False if it was not indexed."""
-        with self.lock, self.db:
+        with self._writing():
             if not self.db.execute("SELECT 1 FROM files WHERE path=?", (old,)).fetchone():
                 return False
             if self.db.execute("SELECT 1 FROM files WHERE path=?", (new,)).fetchone():
@@ -190,12 +213,21 @@ class Store:
             return [(r["rowid"], r["s"]) for r in rows]
 
     def vec_search(self, emb: list[float], k: int) -> list[tuple[int, float]]:
+        """The k chunks nearest to `emb` as (chunk id, cosine distance), nearest first."""
         with self.lock:
-            rows = self.db.execute(
-                "SELECT rowid, distance FROM vec_chunks WHERE embedding MATCH ? AND k = ? ORDER BY distance",
-                (_pack(emb), k),
-            ).fetchall()
-            return [(r["rowid"], r["distance"]) for r in rows]
+            if self._vectors is None:
+                self._vectors = self._load_vectors()
+            return self._vectors.search(emb, k)
+
+    def _load_vectors(self) -> VectorIndex:
+        rows = self.db.execute("SELECT rowid, embedding FROM vec_chunks")
+        return VectorIndex.from_rows(self.dim, ((r["rowid"], r["embedding"]) for r in rows))
+
+    def warm_vectors(self) -> None:
+        """Load the in-memory vectors now, so the first search doesn't pay for it (~60 ms)."""
+        with self.lock:
+            if self._vectors is None:
+                self._vectors = self._load_vectors()
 
     def chunks_by_ids(self, ids: list[int]) -> dict[int, sqlite3.Row]:
         if not ids:

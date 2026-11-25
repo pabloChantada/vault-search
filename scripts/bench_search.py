@@ -145,6 +145,9 @@ def benchmark(
             Indexer(cfg, store, embedder).sync_all()
             built = True
         stats = store.stats()
+        t0 = time.perf_counter()
+        store.warm_vectors()  # the engine does this at startup, so keep it out of the first query
+        vectors_s = time.perf_counter() - t0
 
         searcher = Searcher(store, embedder)
         timer = PhaseTimer()
@@ -185,6 +188,7 @@ def benchmark(
         "notes": stats["notes"],
         "chunks": stats["chunks"],
         "model_load_s": load_s,
+        "vectors_load_ms": 1000 * vectors_s,
         "limit": limit,
         "repeat": repeat,
         "queries": len(queries),
@@ -210,7 +214,7 @@ def _print_report(res: dict[str, Any]) -> None:
     con.print(
         f"[bold]Index[/] {res['notes']} notes, {res['chunks']} chunks{note}; "
         f"embedder {res['embedder']} (load {res['model_load_s']:.2f} s, "
-        f"{res['embed_threads'] or 'default'} threads)"
+        f"{res['embed_threads'] or 'default'} threads); vectors loaded in {res['vectors_load_ms']:.0f} ms"
     )
     tot = res["total"]
     con.print(
