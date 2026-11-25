@@ -31,8 +31,6 @@ def build_parser() -> argparse.ArgumentParser:
     mp.add_argument("--method", choices=["auto", "umap", "pca"], default="auto",
                     help="auto = UMAP if umap-learn is installed, else PCA")
     mp.add_argument("--no-sync", action="store_true", help="Don't update the index first")
-    mp.add_argument("--theme", choices=["sansui", "yggdrasil"], default="sansui",
-                    help="sansui = 3D ink landscape; yggdrasil = a tree that grows with time")
     mp.add_argument("--open", action="store_true",
                     help="Open the map in a window of its own (a browser tab if no Chromium browser is found)")
     sub.add_parser("serve", help="MCP server over stdio (launched by Claude Desktop)")
@@ -81,7 +79,7 @@ def main(argv: list[str] | None = None) -> None:
         elif cmd == "watch":
             commands.cmd_watch(cfg)
         elif cmd == "map":
-            commands.cmd_map(cfg, args.out, args.method, args.theme, sync=not args.no_sync, open_browser=args.open)
+            commands.cmd_map(cfg, args.out, args.method, sync=not args.no_sync, open_browser=args.open)
 
 
 if __name__ == "__main__":
