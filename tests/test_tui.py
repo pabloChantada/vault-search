@@ -217,3 +217,36 @@ def test_the_note_follows_the_new_results_not_the_old_ones(cfg):
             await pilot.press("ctrl+q")
 
     asyncio.run(scenario())
+
+
+def test_tui_suggests_words_as_you_type(cfg):
+    async def scenario():
+        app = VaultSearchApp(cfg)
+        async with app.run_test(size=(120, 30)) as pilot:
+            await _ready(app, pilot)
+            prompt, words = app.query_one("#prompt"), app.query_one("#words")
+
+            await pilot.press(*"wea")
+            await pilot.pause(0.3)
+            assert words.display and "weather" in str(words.render())
+            await pilot.press("right")  # accepts the ghost completion
+            assert prompt.value == "weather"
+
+            prompt.value = ""  # (ctrl+a is "home" in Textual's Input, not "select all")
+            await pilot.press(*"study ra")
+            await pilot.pause(0.3)
+            assert "rain" in str(words.render())
+            app.action_use_word("rain")  # what clicking a suggestion does
+            assert prompt.value == "study rain " and prompt.cursor_position == len("study rain ")
+            await pilot.pause(0.1)
+            assert not words.display  # nothing is being typed after the space
+
+            await pilot.press(*"we")
+            await pilot.pause(0.3)
+            assert words.display
+            prompt.value = ""
+            await pilot.pause(0.1)
+            assert not words.display
+            await pilot.press("ctrl+q")
+
+    asyncio.run(scenario())

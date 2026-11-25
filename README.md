@@ -24,7 +24,7 @@ Everything runs **locally**, at the moment I don't plan to implement any type of
 
 The TUI wears the same ink-on-paper palette as the [vault map](#vault-map): washi paper, sumi ink, and one vermilion seal that marks where you are (the focused pane, the cursor, the words that matched). The seal in the top right corner turns grey while the index is being updated. `ctrl+p` → *Night colours* swaps to paper-on-ink for dark rooms.
 
-Results update as you type. Each result shows the note, the folder and section it came from, and a line with your words in vermilion. Move through them with `j`/`k` (or the arrows) and the note on the right follows, scrolled to the matching section. Press `l` to step into the note and read it like a pager in Vim; `h` brings you back.
+Results update as you type, and a line under the search box suggests words from your vault that start with what you're typing (`→` takes the first, or click any of them). Each result shows the note, the folder and section it came from, and a line with your words in vermilion. Move through them with `j`/`k` (or the arrows) and the note on the right follows, scrolled to the matching section. Press `l` to step into the note and read it like a pager in Vim; `h` brings you back.
 
 Press `Enter` and the note opens in Obsidian. Press `e` to open it in your editor instead (default for the terminal - *TBC*), or `y` to copy its path. `m` opens the 3D map in a window of its own.
 
@@ -43,6 +43,7 @@ Every time you save a note in Obsidian, the status line flashes it being re-inde
 | Where    | Key                     | What it does                          |
 | -------- | ----------------------- | ------------------------------------- |
 | search   | type                    | search as you go                      |
+|          | `→`                     | complete the suggested word           |
 |          | `Enter` / `↓`           | go to the results                     |
 | results  | `j` `k` / `↑` `↓`       | next, previous result (the note follows) |
 |          | `l` / `Tab`             | read the note                         |

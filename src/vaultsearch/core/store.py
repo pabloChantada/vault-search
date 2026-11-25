@@ -6,6 +6,7 @@ import json
 import sqlite3
 import struct
 import threading
+from collections import Counter
 from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
@@ -13,6 +14,7 @@ from pathlib import Path
 
 import sqlite_vec
 
+from .text import WORD_RE, fold
 from .vectors import VectorIndex
 
 SCHEMA_VERSION = "2"  # 2: files.created
@@ -21,6 +23,8 @@ SCHEMA_VERSION = "2"  # 2: files.created
 COMMON_TERM_SHARE = 0.2
 # Below this many chunks every search is fast anyway, and shares are too noisy to judge by
 COMMON_TERM_MIN_CHUNKS = 200
+# Longer "words" are mostly runs of Japanese text (no spaces to split on): no use as suggestions
+SUGGEST_MAX_CHARS = 24
 
 
 def _pack(vec: list[float]) -> bytes:
@@ -63,6 +67,7 @@ class Store:
         # in step with every write after that (see vectors.py)
         self._vectors: VectorIndex | None = None
         self._common: tuple[int, frozenset[str]] | None = None  # (chunk count, terms)
+        self._surface: dict[str, str] = {}  # indexed term -> the word as written ("arbol" -> "árbol")
         self._init_schema(model_id)
 
     @contextmanager
@@ -258,13 +263,63 @@ class Store:
             if n < COMMON_TERM_MIN_CHUNKS:
                 return frozenset()
             if self._common is None or abs(n - self._common[0]) > 0.05 * self._common[0]:
-                # A TEMP table: a per-connection view over the FTS index, not a schema change
-                self.db.execute(
-                    "CREATE VIRTUAL TABLE IF NOT EXISTS temp.chunks_vocab USING fts5vocab(main, chunks_fts, row)"
-                )
+                self._ensure_vocab()
                 rows = self.db.execute("SELECT term FROM temp.chunks_vocab WHERE doc > ?", (COMMON_TERM_SHARE * n,))
                 self._common = (n, frozenset(r["term"] for r in rows))
             return self._common[1]
+
+    def _ensure_vocab(self) -> None:
+        # A TEMP table: a per-connection view over the FTS index's terms, not a schema change
+        self.db.execute("CREATE VIRTUAL TABLE IF NOT EXISTS temp.chunks_vocab USING fts5vocab(main, chunks_fts, row)")
+
+    def suggest_words(self, prefix: str, limit: int = 5) -> list[str]:
+        """Words in the vault that start with `prefix`, the ones in most chunks first.
+
+        Accents and case are ignored when matching, and each word comes back as it's most
+        often written in the notes ("arb" -> "árbol"). Common words, numbers and the prefix
+        itself are left out. Typing must never wait on the indexer: whenever it holds the
+        lock, this gives up and returns what it has.
+        """
+        folded = fold(prefix)
+        if len(folded) < 2 or not self.lock.acquire(timeout=0.02):
+            return []
+        try:
+            common = self.common_terms()
+            self._ensure_vocab()
+            rows = self.db.execute(
+                "SELECT term FROM temp.chunks_vocab WHERE term > ? AND term < ? ORDER BY doc DESC LIMIT ?",
+                (folded, folded + "􏿿", limit * 4),
+            ).fetchall()
+        finally:
+            self.lock.release()
+        terms = [t for (t,) in rows if t not in common and not t.isdigit() and len(t) <= SUGGEST_MAX_CHARS]
+        words = []
+        for term in terms[:limit]:
+            # One term at a time (~5 ms the first time), so a search never waits long behind this
+            written = self._surface.get(term) or self._as_written(term)
+            if written is None:
+                break
+            words.append(written)
+        return words
+
+    def _as_written(self, term: str) -> str | None:
+        """How `term` (lowercased, accents stripped by the tokenizer) is most often written in
+        the notes: people skip accents now and then, so one occurrence isn't enough. None if
+        the lock is busy."""
+        if not self.lock.acquire(timeout=0.02):
+            return None
+        try:
+            rows = self.db.execute(
+                "SELECT title, heading, text FROM chunks_fts WHERE chunks_fts MATCH ? LIMIT 60", (f'"{term}"',)
+            ).fetchall()
+        finally:
+            self.lock.release()
+        forms = Counter(w.lower() for r in rows for w in WORD_RE.findall(" ".join(r)) if fold(w) == term)
+        written = forms.most_common(1)[0][0] if forms else term
+        if len(self._surface) > 10_000:
+            self._surface.clear()
+        self._surface[term] = written
+        return written
 
     def warm(self) -> None:
         """Load what searches keep in memory now (~100 ms), so the first search doesn't pay for it."""
